@@ -1,0 +1,26 @@
+# Backend
+backend/target/
+backend/.env
+backend/.env.*
+!backend/.env.example
+backend/data/
+backend/media/
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+.npm-cache/
+frontend/.npm-cache/
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+

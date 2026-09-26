@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  imwatching:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: imwatching-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - DATABASE_URL=sqlite:///app/data/imwatching.db?mode=rwc
+      - JWT_SECRET=change-me-to-a-random-secret-at-least-32-chars-long
+      - MEDIA_DIR=/app/media
+      - AI_ENABLED=true
+      - AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+      - AI_API_KEY=${AI_API_KEY:-}
+      - AI_MODEL=gemini-3.8-flash
+      - COMMANDCODE_BASE_URL=https://api.commandcode.ai/provider/v1
+      - COMMANDCODE_API_KEY=${COMMANDCODE_API_KEY:-}
+    volumes:
+      - imwatching_data:/app/data
+      - imwatching_media:/app/media
+
+volumes:
+  imwatching_data:
+  imwatching_media:

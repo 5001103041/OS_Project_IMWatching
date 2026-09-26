@@ -1,0 +1,51 @@
+[package]
+name = "imwatching-backend"
+version = "0.1.0"
+edition = "2021"
+authors = ["IMWatching Contributors"]
+license = "MIT"
+description = "IMWatching — AI video behavior analysis backend (Rust + Axum + SQLite)"
+
+[dependencies]
+# Web framework
+axum = { version = "0.7", features = ["multipart", "macros"] }
+tower = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["fs", "cors", "trace"] }
+hyper = { version = "1", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "macros", "chrono", "uuid", "migrate"] }
+
+# Auth (JWT + PBKDF2 password hashing)
+jsonwebtoken = "9"
+hmac = "0.12"
+
+# HTTP client (AI vision calls)
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+
+# Image decoding (motion detection between frames)
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Utilities
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+anyhow = "1"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+dotenvy = "0.15"
+base64 = "0.22"
+sha2 = "0.10"
+rand = "0.8"
+mime_guess = "2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
