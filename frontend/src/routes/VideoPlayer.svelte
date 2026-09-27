@@ -646,6 +646,9 @@
   /* ═══ Event card ═══ */
   .event-card {
     display: flex;
+    justify-content: flex-start;
+    width: 100%;
+    box-sizing: border-box;
     gap: 10px;
     align-items: flex-start;
     text-align: left;
@@ -661,8 +664,13 @@
     border-color: var(--primary);
     box-shadow: 0 0 0 1px var(--primary);
   }
+  .event-card:active {
+    transform: none;
+  }
   .event-card img {
     width: 60px;
+    min-width: 60px;
+    max-width: 60px;
     height: 40px;
     object-fit: cover;
     border-radius: 6px;
@@ -673,6 +681,7 @@
     display: flex;
     flex-direction: column;
     gap: 3px;
+    flex: 1;
     min-width: 0;
   }
   .row {
