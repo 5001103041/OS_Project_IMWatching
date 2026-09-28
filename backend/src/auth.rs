@@ -14,7 +14,7 @@ use crate::error::AppError;
 use crate::models::User;
 use crate::state::AppState;
 
-pub const ACCESS_TOKEN_TTL_SECS: i64 = 3600 * 24; // 24h
+pub const ACCESS_TOKEN_TTL_SECS: i64 = 3600 * 24 * 30; // 30 days
 
 type HmacSha256 = Hmac<Sha256>;
 

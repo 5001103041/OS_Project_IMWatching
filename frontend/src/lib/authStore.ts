@@ -46,3 +46,9 @@ export function logout() {
   setUser(null);
   currentUser.set(null);
 }
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('imw_unauthorized', () => {
+    logout();
+  });
+}

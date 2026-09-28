@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { login, authLoading } from '../lib/authStore';
 
   export let onRegister: () => void;
@@ -7,9 +8,18 @@
   let email = '';
   let password = '';
   let error = '';
+  let infoMessage = '';
+
+  onMount(() => {
+    if (sessionStorage.getItem('imw_session_expired')) {
+      infoMessage = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.';
+      sessionStorage.removeItem('imw_session_expired');
+    }
+  });
 
   async function submit() {
     error = '';
+    infoMessage = '';
     if (!email || !password) {
       error = 'Vui lòng nhập email và mật khẩu.';
       return;
@@ -29,6 +39,7 @@
     <h1>Đăng nhập</h1>
     <p class="sub">Hệ thống phân tích hành vi từ video bằng AI</p>
 
+    {#if infoMessage}<div class="info-banner">{infoMessage}</div>{/if}
     {#if error}<div class="error">{error}</div>{/if}
 
     <form on:submit|preventDefault={submit}>
@@ -86,6 +97,16 @@
     gap: 6px;
     font-size: 13px;
     color: var(--text-dim);
+  }
+  .info-banner {
+    background: rgba(212, 160, 23, 0.15);
+    border: 1px solid rgba(212, 160, 23, 0.35);
+    color: #f7c96a;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    margin-top: 12px;
+    font-size: 13px;
+    line-height: 1.4;
   }
   .error {
     background: rgba(231, 76, 60, 0.15);

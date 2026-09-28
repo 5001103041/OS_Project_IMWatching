@@ -50,6 +50,14 @@ async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
   }
 
   if (!res.ok) {
+    if (res.status === 401 && !path.startsWith('/auth/')) {
+      setToken(null);
+      setUser(null);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('imw_session_expired', '1');
+        window.dispatchEvent(new CustomEvent('imw_unauthorized'));
+      }
+    }
     const msg = data?.error || res.statusText || 'Request failed';
     throw new Error(msg);
   }
