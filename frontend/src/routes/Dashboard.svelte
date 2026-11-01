@@ -166,8 +166,14 @@
     const ctx2 = dangerBarCanvas?.getContext('2d');
     if (ctx2) {
       // Group and sum counts by translated Vietnamese label to avoid duplicates
+      const nonDangerousBehaviors = new Set([
+        'walking', 'standing', 'sitting', 'studying', 'talking', 'gesturing',
+        'gesture', 'pointing', 'thumbs_up', 'phone_use', 'carrying_object',
+        'reading', 'eating', 'drinking', 'dancing', 'hugging', 'driving', 'working', 'exercising',
+      ]);
       const behaviorMap = new Map<string, number>();
       for (const b of stats.dangerous_behaviors) {
+        if (nonDangerousBehaviors.has((b.behavior || '').toLowerCase())) continue;
         const label = behaviorLabel(b.behavior);
         behaviorMap.set(label, (behaviorMap.get(label) || 0) + b.count);
       }

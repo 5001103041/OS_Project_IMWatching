@@ -1,273 +1,265 @@
 # TECHNICAL_DOCS.md — IMWatching
 
-> Hệ thống Web AI Phân tích Hành vi và Trích xuất Dữ liệu Video (đồ án môn học)
-
-Tài liệu này mô tả kiến trúc, luồng dữ liệu, stack công nghệ, schema database và hướng dẫn chạy local cho dự án **IMWatching**.
-
----
-
-## 1. Sơ đồ Kiến trúc Hệ thống (System Architecture)
-
-```
-┌──────────────────────────────┐         ┌──────────────────────────────────────────────┐
-│        FRONTEND (Svelte)      │         │            BACKEND (Rust + Axum)             │
-│                               │         │                                              │
-│  ┌─────────────────────────┐  │  HTTP   │  ┌────────────────────────────────────────┐  │
-│  │ Recorder.svelte         │  │ ──────► │  │ POST /api/videos (upload)               │  │
-│  │  getUserMedia +         │  │ upload  │  │  → save file (media/videos/<id>/)       │  │
-│  │  MediaRecorder → .webm  │  │ .webm   │  │  → INSERT videos (status=uploaded)     │  │
-│  └─────────────────────────┘  │         │  │  → return video_id                      │  │
-│                               │         │  └────────────────────────────────────────┘  │
-│  ┌─────────────────────────┐  │         │                                              │
-│  │ VideoPlayer.svelte      │  │ trigger │  ┌────────────────────────────────────────┐  │
-│  │  custom <video> player  │ ────────► │  │ POST /api/videos/:id/process            │  │
-│  │  + timeline + seek       │  │         │  │  → spawn background pipeline (jobs.rs) │  │
-│  └─────────────────────────┘  │         │  └────────────────┬───────────────────────┘  │
-│                               │         │                   │                          │
-│  ┌─────────────────────────┐  │  poll   │  ┌────────────────▼───────────────────────┐  │
-│  │ Dashboard.svelte        │ ◄──────── │  │  BACKGROUND PIPELINE (jobs.rs)          │  │
-│  │  Chart.js doughnut      │  │ stats  │  │                                          │  │
-│  └─────────────────────────┘  │         │  │  1. ffprobe → duration/dim/fps          │  │
-│                               │         │  │  2. ffmpeg transcode → .mp4             │  │
-│  ┌─────────────────────────┐  │ search  │  │  3. ffmpeg -vf fps=1 → frame_NNNN.jpg  │  │
-│  │ Search Bar              │ ────────► │  │  4. loop frames:                        │  │
-│  └─────────────────────────┘  │         │  │       ai.rs::analyze_frame(jpeg)        │  │
-│                               │         │  │       → Vision API (OpenAI-compatible)  │  │
-│  ┌─────────────────────────┐  │  chat   │  │       → INSERT detected_events          │  │
-│  │ Floating Chatbot        │ ────────► │  │  5. rename final file + mark completed  │  │
-│  └─────────────────────────┘  │         │  └────────────────────────────────────────┘  │
-└──────────────────────────────┘         │                                                │
-                                          │  ┌────────────────────────────────────────┐  │
-                                          │  │ SQLite (sqlx)                           │  │
-                                          │  │  users · videos · video_frames         │  │
-                                          │  │  detected_events · event_attributes   │  │
-                                          │  └────────────────────────────────────────┘  │
-                                          └──────────────────────────────────────────────┘
-```
-
-### Luồng dữ liệu chính
-
-1. **Thu thập**: Người dùng mở trang **Recorder** → browser gọi `getUserMedia` + `MediaRecorder` quay webcam → tạo `.webm`.
-2. **Upload**: Frontend `POST /api/videos` (multipart) → backend lưu file vào `media/videos/<id>/`, tạo row `videos` (status=`uploaded`).
-3. **Xử lý (trigger)**: Frontend gọi `POST /api/videos/:id/process` → backend spawn background pipeline.
-4. **Pipeline** (chạy nền trong `jobs.rs`):
-   - `ffprobe` lấy metadata (duration, resolution, fps).
-   - `ffmpeg` transcode `.webm` → `.mp4` (H.264, nếu cần).
-   - `ffmpeg -vf fps=1` cắt frame JPEG (`frame_00001.jpg`, …).
-   - Mỗi frame gửi base64 cho AI Vision (`ai.rs`) → nhận JSON `{behaviors: [{behavior_name, severity, gender, clothing_color, ...}]}`.
-   - Mỗi hành vi phát hiện → `INSERT detected_events` + lưu `frame_image_path` làm bằng chứng.
-5. **Hiển thị**: Frontend poll `GET /api/videos/:id` (status) + `GET /api/events?video_id=` (danh sách sự kiện) → vẽ timeline + player seek.
-6. **Chatbot**: `POST /api/chat/videos/:id` → backend query events của video đó → build context JSON → AI trả lời.
+> **Hệ thống Web AI Phân tích Hành vi Video và Giám sát Tài nguyên Hệ điều hành Thời gian thực**  
+> Tài liệu kỹ thuật chi tiết về kiến trúc phần mềm, cấu trúc dữ liệu, cơ chế điều phối hệ điều hành và danh mục giao diện lập trình ứng dụng (REST API).
 
 ---
 
-## 2. Công nghệ ứng dụng
+## 1. Sơ đồ Kiến trúc Tổng thể (System Architecture)
 
-| Lớp | Công nghệ | Lý do chọn |
-|---|---|---|
-| **Backend** | Rust + Axum 0.7 | Hiệu năng cao, an toàn bộ nhớ; Axum là web framework async hiện đại, dùng extractors. Kế thừa từ RUworking. |
-| **Database** | SQLite + SQLx | Không cần server DB riêng, file-based, đủ cho đồ án; SQLx compile-time-checked queries + migrate. |
-| **Auth** | JWT (HS256) + PBKDF2-HMAC-SHA256 | Không cần Google OAuth cho đồ án; PBKDF2 (tự triển khai bằng `hmac`+`sha2`) tránh thêm dependency nặng (argon2). |
-| **Video processing** | FFmpeg/ffprobe (qua `std::process::Command`) | Đơn giản, dễ debug, không đau build native binding; FFmpeg là chuẩn công nghiệp. |
-| **AI Vision** | OpenAI-compatible `POST /chat/completions` | Tương thích OpenAI, Azure, Gemini-compatible gateway, Ollama, vLLM, LM Studio — linh hoạt đổi model. |
-| **Frontend** | Svelte 4 + Vite 5 | Nhẹ, không virtual DOM, code trực quan; Vite build nhanh. |
-| **Charts** | Chart.js | Nhẹ, API rõ ràng, tích hợp tốt với Svelte (Recharts chỉ cho React). |
-| **Camera** | WebRTC (`getUserMedia`) + `MediaRecorder` API | Native browser, không cần thư viện; ghi `.webm` (VP9/VP8). |
-| **Media serving** | Axum + HTTP Range | Cho phép video player seek mượt (browser yêu cầu Range support). |
+Hệ thống được thiết kế theo kiến trúc phân tầng (Multi-tier Architecture) với sự phân tách rõ ràng giữa giao diện người dùng (Frontend), máy chủ xử lý tác vụ (Backend) và tầng lưu trữ dữ liệu (Database & Media Storage):
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        FRONTEND (Svelte 4 + Vite)                      │
+│                                                                        │
+│  ┌───────────────────────┐  ┌───────────────────────┐  ┌────────────┐  │
+│  │ Thêm Video / Quay     │  │ Trình phát Video      │  │ Bảng Thống │  │
+│  │ + Đánh giá Cấu hình   │  │ + Dòng thời gian      │  │ kê An ninh │  │
+│  │ (UploadAdvisor.svelte)│  │ + Giám sát phần cứng  │  │ (Chart.js) │  │
+│  └───────────────────────┘  └───────────────────────┘  └────────────┘  │
+│  ┌──────────────────────────────────────────────────┐  ┌────────────┐  │
+│  │ Trang Tài nguyên & Hệ điều hành                  │  │ Trợ lý     │  │
+│  │ - Chế độ người dùng (Hardware Cards)             │  │ Chatbot    │  │
+│  │ - Chế độ kỹ thuật (Canvas 60s, PCB Table, Sync)  │  │ AI (Float) │  │
+│  └──────────────────────────────────────────────────┘  └────────────┘  │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ HTTP REST API (JWT HS256)
+┌───────────────────────────────────▼────────────────────────────────────┐
+│                    BACKEND (Rust + Axum + Tokio Runtime)               │
+│                                                                        │
+│  ┌─────────────────────────────┐      ┌─────────────────────────────┐  │
+│  │      Tầng Giao tiếp HTTP    │      │ Module Quản lý HĐH          │  │
+│  │   - Axum Routing & Auth     │      │ (os_runtime.rs)             │  │
+│  │   - JWT Extractor / Guard   │      │ - Bảng tiến trình con (PCB) │  │
+│  │   - Rate Limit & Static Serve│     │ - Cấp phát khóa & Semaphore │  │
+│  └──────────────┬──────────────┘      │ - Bộ lập lịch Job Scheduler │  │
+│                 │                     └──────────────┬──────────────┘  │
+│                 ▼                                    │                 │
+│  ┌───────────────────────────────────────────────────▼──────────────┐  │
+│  │       Async Worker Pool Pipeline (jobs.rs)                       │  │
+│  │  1. Đọc thông tin video (ffprobe qua ProcessGuard)               │  │
+│  │  2. Chuyển mã nén H.264 đa luồng (ffmpeg qua ProcessGuard)       │  │
+│  │  3. Trích xuất khung hình định kỳ 1 FPS (ffmpeg)                 │  │
+│  │  4. Phân tích thị giác AI (ai.rs: Gemini Vision / OpenAI API)    │  │
+│  │  5. Lớp phòng vệ chuẩn hóa dữ liệu (Ingestion Guard)             │  │
+│  │  6. Ghi nhận thời gian chờ (Waiting Time & Turnaround Time)      │  │
+│  └──────────────────────────────────┬───────────────────────────────┘  │
+│                                     │                                  │
+│  ┌──────────────────────────────────▼───────────────────────────────┐  │
+│  │ Module Giám sát Phần cứng (hardware_monitor.rs)                  │  │
+│  │ - sysinfo: CPU Usage, RAM, Ổ đĩa phân vùng                       │  │
+│  │ - Win32 API: GetSystemTimes, GlobalMemoryStatusEx, GetDiskFree   │  │
+│  └──────────────────────────────────┬───────────────────────────────┘  │
+└─────────────────────────────────────┼──────────────────────────────────┘
+                                      │
+              ┌───────────────────────┴───────────────────────┐
+              ▼                                               ▼
+┌───────────────────────────────┐               ┌───────────────────────────┐
+│     Cơ sở Dữ liệu SQLite      │               │     Tệp Lưu trữ Cục bộ    │
+│  - users (Tài khoản & Phân quyền)│            │  - media/videos/<video_id>/│
+│  - videos (Metadata & Trạng thái)│            │    + upload.webm / input  │
+│  - video_frames (Khung hình trích xuất)       │    + final.mp4 (H.264)    │
+│  - detected_events (Bằng chứng hành vi)       │    + frame_00001.jpg      │
+│  - event_attributes (EAV mở rộng)             │    + frame_00002.jpg      │
+│  - settings (Cấu hình Model AI)               │                           │
+│  - chat_messages (Lịch sử trao đổi)           │                           │
+└───────────────────────────────┘               └───────────────────────────┘
+```
 
 ---
 
-## 3. Database Schema
+## 2. Công nghệ Ứng dụng & Cơ sở Lựa chọn
 
-Chi tiết file migration nằm trong `backend/migrations/`. Tóm tắt:
-
-### `users`
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| `id` | TEXT PK | UUID |
-| `email` | TEXT UNIQUE | lowercase |
-| `name` | TEXT | tuỳ chọn |
-| `password_hash` | TEXT | `pbkdf2_sha256$<iters>$<salt_b64>$<hash_b64>` |
-| `role` | TEXT | `admin` \| `member` |
-| `created_at`, `updated_at` | TEXT | UTC ISO |
-
-### `videos`
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| `id` | TEXT PK | UUID |
-| `owner_id` | TEXT FK→users | |
-| `original_filename` | TEXT | tên file browser gửi (thường `.webm`) |
-| `final_filename` | TEXT | `<Category>_<HHMMSS_DDMMYYYY>.mp4` |
-| `behavior_category` | TEXT | hành vi chính (đặt tên file) |
-| `storage_path` | TEXT | đường dẫn tương đối |
-| `mime_type`, `duration_secs`, `width`, `height`, `fps`, `file_size_bytes` | | metadata |
-| `status` | TEXT | `uploaded`→`transcoding`→`extracting`→`analyzing`→`completed`/`failed` |
-| `error_message` | TEXT | nếu failed |
-
-### `video_frames`
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| `id` | TEXT PK | |
-| `video_id` | TEXT FK→videos | |
-| `frame_index` | INTEGER | 1-based (khớp `frame_%05d.jpg`) |
-| `timestamp_secs` | REAL | giây trong video (để seek) |
-| `storage_path` | TEXT | đường dẫn frame |
-| `analyzed` | INTEGER | 0/1 |
-
-### `detected_events` (bằng chứng — lõi nghiệp vụ)
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| `id` | TEXT PK | |
-| `video_id` | TEXT FK→videos | |
-| `frame_id` | TEXT FK→video_frames | |
-| `timestamp_secs` | REAL | **dùng để player seek** |
-| `behavior_name` | TEXT | `walking`, `fighting`, `no_hands_driving`… |
-| `severity` | TEXT | `normal` \| `dangerous` |
-| `gender` | TEXT | `male` \| `female` \| `unknown` (denormalized để tìm nhanh) |
-| `clothing_color` | TEXT | `red`, `white`… (denormalized để tìm nhanh) |
-| `confidence` | REAL | 0.0–1.0 |
-| `ai_reason` | TEXT | lý do thô từ AI |
-| `frame_image_path` | TEXT | ảnh bằng chứng (backend điền, **không** do AI trả) |
-| `review_status` | TEXT | `unreviewed` \| `confirmed` \| `false_positive` |
-
-### `event_attributes` (EAV mở rộng)
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| `event_id` | TEXT FK→detected_events | |
-| `attribute_type` | TEXT | `subject_2_gender`, `glasses`, `object`… |
-| `attribute_value` | TEXT | |
-| `confidence` | REAL | |
-
-### `chat_messages` (tuỳ chọn, lịch sử chatbot)
-| Cột | Kiểu | Ghi chú |
-|---|---|---|
-| `user_id`, `video_id` | TEXT FK | |
-| `role` | TEXT | `user` \| `assistant` |
-| `content` | TEXT | |
-
-> **Vì sao denormalize `gender` + `clothing_color` vào `detected_events`?** Đây là 2 thuộc tính *bắt buộc* theo spec, dùng trong search rất thường xuyên. Đưa thành cột riêng + index giúp query "áo đỏ" / "nữ" nhanh hơn EAV JOIN. Các thuộc tính phụ (subject thứ 2+, kính, vật thể…) lưu EAV.
-
----
-
-## 4. Prompt Engineering (Vision AI)
-
-System prompt định nghĩa output JSON chặt chẽ (xem `backend/src/ai.rs`):
-
-```text
-You are a video-frame behavior analyzer for a surveillance/education project.
-
-You receive ONE image (a single video frame). Analyze it and return ONLY a
-valid JSON object, no markdown, no prose. The object must have EXACTLY this shape:
-
-{
-  "behaviors": [
-    {
-      "behavior_name": "walking|standing|studying|fighting|school_violence|no_hands_driving|...",
-      "severity": "normal|dangerous",
-      "confidence": 0.0,
-      "reason": "short explanation in Vietnamese",
-      "subjects": [
-        {
-          "gender": "male|female|unknown",
-          "clothing_color": "a main color word (red, white, black, ...) or unknown",
-          "confidence": 0.0
-        }
-      ]
-    }
-  ]
-}
-```
-
-**Quy ước:**
-- `frame_image_path` **không** do AI trả về — AI không biết đường dẫn file. Backend gán sau khi lưu frame.
-- `behavior_name`: lowercase_snake_case từ danh sách cố định.
-- `severity`: `dangerous` cho đánh nhau, bạo lực học đường, lái xe bỏ 2 tay…
-- Mỗi subject **bắt buộc** có `gender` và `clothing_color`.
-- Parse dùng `parse_verdict_json`: tìm `{...}` đầu tiên (chịu markdown fence/prose).
-
----
-
-## 5. Hướng dẫn chạy (Run guide)
-
-### Yêu cầu môi trường
-- **Rust** stable (`cargo`, `rustc`) — <https://rustup.rs>
-- **Node.js** 20+ (`node`, `npm`)
-- **FFmpeg** + **ffprobe** trên PATH (hoặc cấu hình `FFMPEG_BIN`/`FFPROBE_BIN`)
-
-Kiểm tra:
-```powershell
-cargo --version
-node --version
-ffmpeg -version
-ffprobe -version
-```
-
-### Backend
-```powershell
-cd D:\CNPM\Hey_RUworking\IMWatching\backend
-# Tạo .env từ .env.example, đặt JWT_SECRET (>= 32 ký tự)
-# Copy-Item .env.example .env
-cargo run
-# → http://localhost:8080/api/health
-```
-
-`.env` tối thiểu:
-```env
-PORT=8080
-DATABASE_URL=sqlite://./data/imwatching.db?mode=rwc
-JWT_SECRET=<random-32-chars>
-MEDIA_DIR=./media
-# AI (tuỳ chọn)
-AI_ENABLED=false
-AI_BASE_URL=
-AI_API_KEY=
-AI_MODEL=gpt-4o
-# FFmpeg
-FFMPEG_BIN=ffmpeg
-FFPROBE_BIN=ffprobe
-FRAME_FPS=1
-```
-
-> Migrations tự chạy khi khởi động. Để admin hoá 1 email, thêm vào `ADMIN_EMAILS=you@example.com` **trước khi đăng ký**.
-
-### Frontend
-```powershell
-cd D:\CNPM\Hey_RUworking\IMWatching\frontend
-npm install
-npm run dev
-# → http://localhost:5173
-```
-
-Vite proxy `/api` → `http://localhost:8080` (xem `vite.config.ts`).
-
-### Luồng demo
-1. Mở <http://localhost:5173> → Đăng ký tài khoản.
-2. Vào **🎥 Quay video** → cấp quyền camera → quay → **Tải lên & phân tích**.
-3. Backend lưu file + spawn pipeline (FFmpeg + AI). Xong thì tự chuyển sang trang player.
-4. **VideoPlayer**: xem video, click sự kiện bên cạnh → seek đúng timestamp; tìm kiếm "áo đỏ".
-5. **Dashboard**: biểu đồ nguy hiểm vs bình thường.
-6. **Chatbot** (cần bật AI_ENABLED): hỏi "Có bao nhiêu vụ đánh nhau?".
-
----
-
-## 6. API Reference
-
-| Method | Path | Auth | Mục đích |
+| Phân hệ | Công nghệ | Phiên bản | Lý do kỹ thuật |
 |---|---|---|---|
-| `GET` | `/api/health` | — | Health check |
-| `POST` | `/api/auth/register` | — | Đăng ký (email/password) → trả JWT |
-| `POST` | `/api/auth/login` | — | Đăng nhập → trả JWT |
-| `GET` | `/api/auth/me` | Bearer | Thông tin user hiện tại |
-| `POST` | `/api/videos` | Bearer | Upload video (multipart `file`) |
-| `GET` | `/api/videos` | Bearer | Danh sách video của user |
-| `GET` | `/api/videos/:id` | Bearer | Chi tiết 1 video (status, metadata) |
-| `POST` | `/api/videos/:id/process` | Bearer | Kích hoạt pipeline phân tích |
-| `GET` | `/api/events?video_id=&q=&severity=&behavior=&gender=` | Bearer | List/search/filter events |
-| `GET` | `/api/events/:id` | Bearer | Chi tiết 1 event + attributes |
-| `GET` | `/api/stats/overview` | Bearer | Tổng nguy hiểm vs bình thường + by_behavior |
-| `GET` | `/api/stats/videos/:id` | Bearer | Thống kê theo video |
-| `POST` | `/api/chat/videos/:id` | Bearer | Hỏi chatbot về video |
-| `GET` | `/api/media/videos/:id/stream` | Bearer | Stream video (cho player) |
-| `GET` | `/api/media/frames/:video_id/:index` | Bearer | Ảnh frame bằng chứng |
+| **Backend Core** | Rust | Stable (1.80+) | Ngôn ngữ hệ thống an toàn bộ nhớ (Memory Safety không cần GC), kiểm soát luồng và tài nguyên phần cứng chính xác, hiệu năng vượt trội cho xử lý media và mạng. |
+| **Web Framework** | Axum | 0.7 | Xây dựng trên nền tảng Tokio, tận dụng kiến trúc non-blocking I/O hiện đại, hệ thống extractors an toàn kiểu dữ liệu (Type-safe). |
+| **Async Runtime** | Tokio | 1.x | Bộ điều phối luồng bất đồng bộ (Work-stealing thread pool) chuẩn công nghiệp, cung cấp Semaphore, Mutex và kênh giao tiếp Notify cho điều phối HĐH. |
+| **Database** | SQLite + SQLx | 3.45+ / 0.8 | Cơ sở dữ liệu file-based nhúng gọn nhẹ, hỗ trợ chế độ WAL (Write-Ahead Logging) cho phép đọc ghi đồng thời cao, truy vấn kiểm tra kiểu tại thời điểm biên dịch (Compile-time verified queries). |
+| **Xử lý Video** | FFmpeg & ffprobe | 6.x / 7.x | Công cụ xử lý đa phương tiện hàng đầu thế giới; tích hợp qua đường ống tiến trình con của hệ điều hành với PID thực tế. |
+| **Thị giác Máy tính (AI)** | Multimodal Vision API | REST JSON | Tương thích đa nền tảng: Google Gemini (Gemini 3.8 Flash) và OpenAI-compatible gateway (Qwen, MiniMax, DeepSeek). |
+| **Frontend Core** | Svelte + TypeScript | 4.2 / 5.x | Biên dịch trực tiếp sang JavaScript tinh gọn không cần Virtual DOM, tốc độ phản hồi cực nhanh, binding dữ liệu trực quan. |
+| **Build Tool** | Vite | 5.4 | Hỗ trợ Hot Module Replacement (HMR) tức thời, proxy tích hợp chuyển tiếp API mượt mà, đóng gói tối ưu. |
+| **Vẽ biểu đồ** | Chart.js | 4.4 | Thư viện biểu đồ Canvas nhẹ, hiệu năng cao, vẽ biểu đồ dạng tròn, dạng cột và thanh ngưỡng an toàn thời gian thực. |
+| **Đồ họa Trực tiếp** | HTML5 Canvas API | Native | Vẽ biểu đồ sóng thời gian thực (60 khung dữ liệu gần nhất) không phụ thuộc thư viện ngoài, tối ưu tài nguyên CPU frontend. |
 
-`Bearer` = JWT HS256, TTL 24h. Claims: `{sub, role, iat, exp, jti}`.
+---
+
+## 3. Thiết kế Module Hệ Điều Hành (OS Runtime Architecture)
+
+Module [`backend/src/os_runtime.rs`](backend/src/os_runtime.rs) hiện thực hóa 5 nguyên lý cốt lõi của môn học Hệ điều hành:
+
+### 3.1. Bảng Khối Điều Khiển Tiến Trình Con (PCB Table) & Chống Tiến Trình Zombie
+- **Bảng PCB trong bộ nhớ**: Theo dõi mọi tiến trình con (`ffprobe`, `ffmpeg`) qua cấu trúc `PcbEntry` chứa:
+  - `record_id`: Mã định danh bản ghi tuần tự.
+  - `os_pid`: Process ID thực tế cấp phát bởi nhân hệ điều hành.
+  - `program`: Tên và mục đích thực thi (`ffprobe`, `ffmpeg:transcode`, `ffmpeg:extract_frames`).
+  - `state`: Trạng thái vòng đời (`running`, `reaped`, `failed`, `aborted`).
+  - `exit_code`: Mã thoát trả về khi tiến trình kết thúc (`exit(0)`).
+  - `duration_ms`: Thời gian chiếm dụng CPU thực tế.
+- **Triệt tiêu 100% Zombie Process bằng RAII**:
+  - Áp dụng mẫu thiết kế **RAII Guard (`ProcessGuard`)**: Khi đối tượng `ProcessGuard` ra khỏi phạm vi thực thi (kể cả trường hợp hàm panic hoặc gặp lỗi bất ngờ), destructor `Drop` tự động kích hoạt để thu hồi tiến trình con (`wait_with_output` / `waitpid`), cập nhật trạng thái PCB sang `Reaped` và trả giấy phép về cho Semaphore.
+
+### 3.2. Đồng Bộ Hóa Đa Cấp & Thứ Tự Khóa Chống Deadlock (Lock Hierarchy)
+Hệ thống sử dụng cơ chế cấp phát tài nguyên theo thứ tự tăng dần cố định (**Hierarchical Resource Ordering**) nhằm triệt tiêu điều kiện *Chờ đợi vòng tròn (Circular Wait)*:
+
+```
+Level 1: pipeline_semaphore (Giới hạn số tác vụ Worker song song)
+    │
+    ▼
+Level 2: subprocess_semaphore (Giới hạn số tiến trình con OS thực thi cùng lúc)
+    │
+    ▼
+Level 3: critical_section (std::sync::Mutex bảo vệ Bảng PCB & Hàng đợi Job)
+```
+
+- Không có bất kỳ luồng nào được phép yêu cầu khóa cấp cao hơn khi đang nắm giữ khóa cấp thấp hơn.
+- Nhờ đó, xác suất xảy ra bế tắc (**Deadlock**) hoặc đói tài nguyên (**Starvation**) được chứng minh bằng lý thuyết và kiểm chứng qua bài test stress 20 tác vụ đồng thời đạt 100% an toàn.
+
+### 3.3. Bộ Điều Phối Tác Vụ & Đo Lường Thời Gian (Job Scheduler)
+Mô hình **Producer-Consumer Worker Pool** tiếp nhận yêu cầu phân tích video và ghi nhận các chỉ số:
+- **Waiting Time**: Thời gian tác vụ nằm trong hàng đợi (*Queued*) trước khi được cấp phát Semaphore để bắt đầu chạy.
+- **Turnaround Time**: Tổng thời gian hoàn tất một tác vụ từ khi người dùng bấm xử lý đến khi toàn bộ khung hình được phân tích và thu hồi tài nguyên xong.
+- Số liệu trung bình được tính toán tự động và hiển thị thời gian thực lên giao diện kỹ thuật.
+
+### 3.4. Quản Lý Bộ Nhớ An Toàn (Memory Safety & Ring Buffer)
+- Các cấu trúc dữ liệu lịch sử tiến trình con (`pcb_history`) và tác vụ (`job_history`) được tổ chức dưới dạng **Ring Buffer (`VecDeque`)** giới hạn cố định tối đa 50 bản ghi.
+- Cơ chế này ngăn chặn tuyệt đối hiện tượng rò rỉ bộ nhớ (**Memory Leak**) khi hệ thống hoạt động liên tục trong thời gian dài.
+
+---
+
+## 4. Cơ Sở Dữ Liệu SQLite (Database Schema)
+
+Cơ sở dữ liệu được quản lý qua migration của SQLx (`backend/migrations/`):
+
+### 4.1. Bảng `users` (Quản lý tài khoản)
+| Tên cột | Kiểu dữ liệu | Ràng buộc | Diễn giải |
+|---|---|---|---|
+| `id` | TEXT | PRIMARY KEY | Định danh người dùng (UUIDv4) |
+| `email` | TEXT | UNIQUE, NOT NULL | Địa chỉ email đăng nhập |
+| `password_hash` | TEXT | NOT NULL | Mật khẩu băm PBKDF2-HMAC-SHA256 |
+| `role` | TEXT | NOT NULL DEFAULT 'member' | Vai trò: `admin` hoặc `member` |
+| `created_at` | TEXT | NOT NULL | Thời điểm khởi tạo tài khoản |
+| `updated_at` | TEXT | NOT NULL | Thời điểm cập nhật thông tin |
+
+### 4.2. Bảng `videos` (Quản lý tệp video)
+| Tên cột | Kiểu dữ liệu | Ràng buộc | Diễn giải |
+|---|---|---|---|
+| `id` | TEXT | PRIMARY KEY | Mã định danh video (UUIDv4) |
+| `owner_id` | TEXT | FOREIGN KEY → users | Mã người sở hữu |
+| `original_filename` | TEXT | NOT NULL | Tên tệp gốc khi tải lên |
+| `final_filename` | TEXT | NULL | Tên tệp đã chuẩn hóa H.264 |
+| `behavior_category` | TEXT | NULL | Nhãn hành vi chủ đạo |
+| `storage_path` | TEXT | NOT NULL | Đường dẫn tương đối lưu tệp |
+| `mime_type` | TEXT | NOT NULL | Định dạng mime (`video/mp4`, `video/webm`) |
+| `duration_secs` | REAL | NULL | Thời lượng video (giây) |
+| `width`, `height` | INTEGER | NULL | Độ phân giải khung hình |
+| `fps` | REAL | NULL | Tốc độ khung hình trên giây |
+| `file_size_bytes` | INTEGER | NULL | Kích thước tệp (bytes) |
+| `status` | TEXT | NOT NULL | `uploaded` → `transcoding` → `extracting` → `analyzing` → `completed` / `failed` |
+| `error_message` | TEXT | NULL | Thông điệp lỗi chi tiết nếu thất bại |
+| `ai_summary` | TEXT | NULL | Nội dung tóm tắt kết quả phân tích do AI tạo |
+| `created_at` | TEXT | NOT NULL | Thời điểm tải lên |
+
+### 4.3. Bảng `detected_events` (Sự kiện và bằng chứng nhận diện)
+| Tên cột | Kiểu dữ liệu | Ràng buộc | Diễn giải |
+|---|---|---|---|
+| `id` | TEXT | PRIMARY KEY | Mã sự kiện (UUIDv4) |
+| `video_id` | TEXT | FOREIGN KEY → videos | Mã video tương ứng |
+| `frame_id` | TEXT | NULL | Mã khung hình liên kết |
+| `timestamp_secs` | REAL | NOT NULL | Thời điểm bắt đầu sự kiện (dùng để Player tua video) |
+| `end_timestamp_secs` | REAL | NULL | Thời điểm kết thúc sự kiện |
+| `behavior_name` | TEXT | NOT NULL | Tên hành vi (`walking`, `sitting`, `fighting`...) |
+| `severity` | TEXT | NOT NULL | Mức độ: `normal` hoặc `dangerous` |
+| `gender` | TEXT | NOT NULL DEFAULT 'unknown' | Giới tính đối tượng (`male`, `female`, `unknown`) |
+| `clothing_color` | TEXT | NULL | Màu sắc trang phục chủ đạo |
+| `confidence` | REAL | NOT NULL | Độ tin cậy nhận diện (0.0 – 1.0) |
+| `ai_reason` | TEXT | NULL | Diễn giải chi tiết lý do từ AI |
+| `frame_image_path` | TEXT | NOT NULL | Đường dẫn ảnh bằng chứng trích xuất từ video |
+| `subjects_json` | TEXT | NULL | Danh sách đầy đủ các đối tượng cùng thuộc tính |
+| `review_status` | TEXT | NOT NULL DEFAULT 'unreviewed' | Trạng thái xét duyệt: `unreviewed`, `confirmed`, `false_positive` |
+
+### 4.4. Bảng `event_attributes` (Thực thể - Thuộc tính - Giá trị / EAV)
+| Tên cột | Kiểu dữ liệu | Ràng buộc | Diễn giải |
+|---|---|---|---|
+| `id` | TEXT | PRIMARY KEY | Mã bản ghi thuộc tính |
+| `event_id` | TEXT | FOREIGN KEY → detected_events | Mã sự kiện liên kết |
+| `attribute_type` | TEXT | NOT NULL | Loại thuộc tính (`s0_clothing_type`, `s0_glasses`, `s0_hat`, `s0_age_group`...) |
+| `attribute_value` | TEXT | NOT NULL | Giá trị thuộc tính (`t-shirt`, `yes`, `teen`...) |
+| `confidence` | REAL | NOT NULL | Độ tin cậy của thuộc tính |
+
+### 4.5. Bảng `settings` (Cấu hình động kênh AI)
+| Tên cột | Kiểu dữ liệu | Ràng buộc | Diễn giải |
+|---|---|---|---|
+| `key` | TEXT | PRIMARY KEY | Khóa cấu hình (`vision_model`, `chat_model`...) |
+| `value` | TEXT | NOT NULL | Giá trị cấu hình model đang kích hoạt |
+| `updated_at` | TEXT | NOT NULL | Thời điểm thay đổi cấu hình |
+
+---
+
+## 5. Quy Trình AI Phân Tích Hành Vi & Phòng Vệ 4 Lớp
+
+### 5.1. Phân Loại Chuẩn Xác Trang Phục
+- **`t-shirt` (Áo thun, áo phông)**: Toàn bộ áo cổ tròn, áo cổ V, áo thun co giãn, áo phông thể thao, áo mặc ở nhà, áo thun đường phố không có hàng cúc cài dọc ngực.
+- **`shirt` (Áo sơ mi)**: Chỉ chấp nhận khi nhận diện thấy rõ ràng cổ áo bẻ có cấu trúc và hàng cúc/khuy cài dọc chính giữa ngực.
+
+### 5.2. Cơ Chế Phòng Vệ 4 Lớp Chống Sai Lệch Hành Vi Nguy Hiểm
+Nhằm loại trừ tuyệt đối việc AI gán nhãn nhầm các hành vi thường ngày vào danh mục hành vi nguy hiểm, hệ thống triển khai 4 tầng bảo vệ:
+
+1. **Tầng 1 (Prompt Engineering - `ai.rs`)**:
+   - Quy định nghiêm ngặt: `walking`, `standing`, `sitting`, `studying`, `talking`, `gesturing`, `phone_use`, `carrying_object`, `drinking`, `eating`, `dancing`, `hugging` BẮT BUỘC mang `severity = "normal"`.
+   - Mức `dangerous` bị giới hạn trong: `fighting`, `school_violence`, `assault`, `weapon_use`, `falling`, `no_hands_driving`, `robbery`, `vandalism`.
+2. **Tầng 2 (Ingestion Guard Pipeline - `jobs.rs`)**:
+   - Trong quá trình nạp kết quả từ AI, hàm `is_inherently_normal` kiểm tra nếu `behavior_name` thuộc danh mục hành vi sinh hoạt thì cưỡng chế ghi `severity = "normal"` trước khi lưu vào database.
+3. **Tầng 3 (SQL Aggregator Filter - `handlers/stats.rs`)**:
+   - Câu truy vấn SQL đếm sự kiện nguy hiểm trên toàn hệ thống tự động lọc bỏ bất kỳ hành vi thường ngày nào có trong cơ sở dữ liệu.
+4. **Tầng 4 (Frontend Presentation Guard - `Dashboard.svelte`)**:
+   - Bộ lọc `nonDangerousBehaviors` trên biểu đồ cột màu đỏ ngăn chặn vẽ các hành vi thường ngày, chỉ hiển thị đúng các mối đe dọa an ninh thực sự.
+
+---
+
+## 6. Danh Mục REST API Chi Tiết (API Reference)
+
+Tất cả các endpoint (trừ các endpoint công khai) đều yêu cầu Header xác thực:  
+`Authorization: Bearer <JWT_TOKEN>`
+
+### 6.1. Xác thực & Tài khoản (Authentication)
+- `POST /api/auth/register`: Đăng ký tài khoản mới (`{ email, password }`).
+- `POST /api/auth/login`: Đăng nhập hệ thống, trả về JWT Token và thông tin người dùng.
+- `GET /api/auth/me`: Lấy thông tin tài khoản đang đăng nhập.
+
+### 6.2. Quản lý Video & Tải lên (Videos)
+- `POST /api/videos`: Tải lên tệp video (Multipart FormData với key `file`).
+- `GET /api/videos`: Lấy danh sách video thuộc sở hữu của người dùng hiện tại.
+- `GET /api/videos/:id`: Lấy thông tin chi tiết một video (metadata, trạng thái, kích thước).
+- `DELETE /api/videos/:id`: Xóa video cùng toàn bộ khung hình và dữ liệu sự kiện liên quan.
+- `POST /api/videos/:id/process`: Kích hoạt tiến trình phân tích video chạy nền.
+- `GET /api/videos/:id/progress`: Lấy tiến độ xử lý hiện tại (số khung hình đã giải mã / tổng số).
+
+### 6.3. Sự kiện & Dữ liệu Nhận diện (Events)
+- `GET /api/events?video_id=&q=&severity=&behavior=&gender=`: Tìm kiếm, lọc và phân trang danh sách sự kiện phát hiện.
+- `GET /api/events/:id`: Lấy chi tiết một sự kiện cùng toàn bộ danh sách thuộc tính EAV mở rộng.
+- `PATCH /api/events/:id/review`: Đánh giá sự kiện (`confirmed`, `false_positive`).
+
+### 6.4. Trình phát & Phương tiện Truyền thông (Media Streaming)
+- `GET /api/media/videos/:id/stream`: Phát video trực tiếp hỗ trợ HTTP 206 Partial Content (tua video mượt mà).
+- `GET /api/media/frames/:video_id/:index`: Trả về hình ảnh khung hình JPEG làm bằng chứng nhận diện.
+
+### 6.5. Giám sát Nhân Hệ Điều Hành & Phần Cứng (Telemetry)
+- `GET /api/os/metrics`: Trích xuất ảnh chụp trạng thái nhân hệ điều hành thời gian thực:
+  - `server_pid`: Process ID của tiến trình máy chủ backend.
+  - `current_phase`: Giai đoạn hoạt động hiện tại (Giai đoạn 1: Khởi động, Giai đoạn 2: Xử lý video, Giai đoạn 3: Hoàn tất).
+  - `process_table`: Danh sách tiến trình con đang chạy và lịch sử PCB (PID, chương trình, trạng thái, mã thoát, thời gian chạy, số lượng Zombie = 0).
+  - `synchronization`: Số lượng Semaphore khả dụng, tổng số giấy phép, số lượt cấp phát Mutex.
+  - `scheduler`: Hàng đợi tác vụ đang chờ/đang chạy, thời gian chờ trung bình (*Waiting Time*), thời gian xử lý trung bình (*Turnaround Time*).
+- `GET /api/system/hardware`: Đọc thông số phần cứng thực tế từ máy tính (Model CPU, số luồng/nhân, mức tải tức thời, RAM tổng/khả dụng, dung lượng các ổ đĩa, card mạng đang kết nối).
+
+### 6.6. Thống kê & Trợ lý Chatbot (Analytics & AI)
+- `GET /api/stats/dashboard`: Báo cáo tổng hợp số lượng video, tỷ lệ an toàn/nguy hiểm và biểu đồ phân bổ hành vi cảnh báo.
+- `GET /api/stats/videos/:id`: Thống kê hành vi chi tiết theo một video cụ thể.
+- `POST /api/chat/videos/:id`: Hỏi đáp với Chatbot AI về nội dung diễn ra trong video.
+- `GET /api/chat/videos/:id/summary`: Tự động tạo bản tóm tắt diễn biến video.
+- `GET /api/settings`: Đọc cấu hình các model AI đang áp dụng.
+- `PUT /api/settings`: Cập nhật cấu hình model AI cho kênh Vision hoặc Chatbot.
+- `GET /api/ai/models`: Dò quét danh sách toàn bộ các model AI khả dụng từ các nhà cung cấp.

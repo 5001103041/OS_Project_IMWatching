@@ -47,7 +47,13 @@ pub fn build_router(state: Arc<AppState>) -> Router {
         .route("/ai/models", get(ai_config::list_models))
         // Media (stream + frames)
         .route("/media/videos/:id/stream", get(media::stream_video))
-        .route("/media/frames/:video_id/:index", get(media::serve_frame));
+        .route("/media/frames/:video_id/:index", get(media::serve_frame))
+        // OS Runtime & PCB Telemetry (Operating Systems course diagnostics)
+        .route("/os/metrics", get(os_metrics))
+        .route("/system/os", get(os_metrics))
+        // Direct Hardware Telemetry (RAM, Disk, CPU, OS, Network)
+        .route("/system/hardware", get(system_hardware))
+        .route("/system/evaluate-upload", post(evaluate_upload));
 
     let mut router = Router::new()
         .nest("/api", api)
@@ -68,5 +74,41 @@ pub fn build_router(state: Arc<AppState>) -> Router {
 }
 
 async fn health() -> axum::Json<serde_json::Value> {
-    axum::Json(serde_json::json!({ "ok": true, "name": "IMWatching", "version": env!("CARGO_PKG_VERSION") }))
+    axum::Json(serde_json::json!({
+        "ok": true,
+        "name": "IMWatching",
+        "version": env!("CARGO_PKG_VERSION"),
+        "pid": std::process::id(),
+    }))
+}
+
+async fn os_metrics(
+    axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+) -> axum::Json<crate::os_runtime::OsTelemetrySnapshot> {
+    axum::Json(state.os.snapshot())
+}
+
+async fn system_hardware() -> axum::Json<crate::hardware_monitor::HardwareTelemetryReport> {
+    let monitor = crate::hardware_monitor::global_hardware_monitor();
+    axum::Json(monitor.get_telemetry())
+}
+
+#[derive(serde::Deserialize)]
+struct EvaluateUploadPayload {
+    file_size_bytes: Option<u64>,
+    duration_secs: Option<f64>,
+    resolution: Option<String>,
+}
+
+async fn evaluate_upload(
+    axum::Json(payload): axum::Json<EvaluateUploadPayload>,
+) -> axum::Json<crate::hardware_monitor::UploadHardwareReadiness> {
+    let monitor = crate::hardware_monitor::global_hardware_monitor();
+    let size = payload.file_size_bytes.unwrap_or(25_000_000);
+    let eval = monitor.evaluate_video_upload(
+        size,
+        payload.duration_secs,
+        payload.resolution.as_deref(),
+    );
+    axum::Json(eval)
 }

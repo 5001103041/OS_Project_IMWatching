@@ -53,18 +53,27 @@ Return ONLY a valid JSON object, no markdown, no prose. The object must have EXA
 
 Rules:
 - ALWAYS include the scene object with your best assessment.
-- List EVERY person you can see. If there are 5 people, subjects MUST contain
-  up to 5 entries (one per person).
-- behavior_name: only lowercase_snake_case. Examples: walking, standing,
-  sitting, studying, talking, fighting, school_violence, no_hands_driving,
-  running, falling, carrying_object, phone_use, smoking, gesturing.
-- severity: \"dangerous\" for fighting, school violence, no_hands_driving,
-  weapon use, etc. Otherwise \"normal\".
-- interaction_type: use 'physical_contact' for fighting/hugging, 'verbal' for talking/shouting, 'gesture' for waving/pointing, 'proximity' for standing close, 'none' for solo activities.
+- List EVERY person you can see. If there are 5 people, subjects MUST contain up to 5 entries (one per person).
+- behavior_name: only lowercase_snake_case. Examples: walking, standing, sitting, studying, talking, gesturing, running, fighting, school_violence, no_hands_driving, falling, carrying_object, phone_use, smoking.
+- severity rules (CRITICAL ACCURACY):
+  * 'normal': Everyday activities MUST ALWAYS be 'normal'. This strictly includes:
+    walking (đi bộ), gesturing (ra hiệu, vẫy tay, giơ tay, làm dấu chữ V, chỉ tay), talking (nói chuyện, trò chuyện), standing (đứng), sitting (ngồi), studying (học tập), running (chạy bộ), phone_use (dùng điện thoại), carrying_object (mang vác đồ vật), drinking, eating, dancing, hugging.
+    UNDER NO CIRCUMSTANCES should 'walking', 'gesturing', 'talking', 'standing', or 'sitting' be marked as 'dangerous'!
+  * 'dangerous': ONLY for real physical violence, crimes, life threats, or dangerous accidents:
+    fighting (đánh nhau, ẩu đả, xô xát, đấm đá, vật lộn), school_violence (bạo lực học đường), assault (tấn công, hành hung), weapon_use (dùng vũ khí, dao, súng, gậy), falling (té ngã chấn thương, tai nạn), no_hands_driving (lái xe buông cả 2 tay), robbery/theft (trộm cướp), vandalism (phá hoại tài sản).
+- clothing_type MUST strictly distinguish between 't-shirt' and 'shirt':
+  * 't-shirt' (áo thun, áo phông): ALL casual tops, stretch knit tops, athletic shirts, sportswear, crewneck/round-neck tops, V-neck tops, plain tops, graphic tees, or any pullover tops without buttons. In home, school, or casual street settings, everyday tops are 't-shirt'. When in doubt or if buttons are absent, ALWAYS choose 't-shirt'.
+  * 'shirt' (áo sơ mi): ONLY formal or office woven dress shirts with an explicit structured turn-down collar AND a full vertical row of buttons/cúc running down the center front (button-up/down shirt). NEVER use 'shirt' for casual tops, athletic tops, or round-collar tops! If there are no clear buttons down the chest, it MUST be 't-shirt'.
+  * 'hoodie': hooded sweatshirt with or without hood up.
+  * 'jacket': zip-up or buttoned outerwear jacket, windbreaker, or coat.
+  * 'dress': female one-piece dress or skirt dress.
+  * 'uniform': school uniform or formal corporate uniform.
+  * 'sweater': knitted wool or heavy knit sweater.
+  * 'tank-top': sleeveless undershirt or vest.
+- interaction_type: use 'physical_contact' for fighting/hugging, 'verbal' for talking/shouting, 'gesture' for waving/pointing/peace-sign, 'proximity' for standing close, 'none' for solo activities.
 - role: in multi-person interactions, identify who is the aggressor/victim/participant. Use 'unknown' if unclear.
 - Every subject MUST include gender and clothing_color.
-- For optional fields (glasses, hat, mask): use true/false only when clearly
-  visible; omit the field entirely if unsure.
+- For optional fields (glasses, hat, mask): use true/false only when clearly visible; omit the field entirely if unsure.
 - clothing_type, bag, age_group, hair_color: use \"unknown\" when not visible.
 - If no person is visible return {\"behaviors\": []}.
 - Do not invent information not visible in the frame.

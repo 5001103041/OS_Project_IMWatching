@@ -54,7 +54,12 @@ struct FfprobeFormat {
 
 /// Run ffprobe on a video file and return normalized metadata.
 pub fn probe(config: &Config, input: &Path) -> Result<ProbeMeta> {
-    let output = Command::new(&config.ffprobe_bin)
+    let os_rt = crate::os_runtime::global();
+    let _subproc_permit = os_rt
+        .acquire_subprocess_permit_blocking()
+        .ok_or_else(|| anyhow!("ffprobe aborted: system shutting down"))?;
+
+    let child = Command::new(&config.ffprobe_bin)
         .args([
             "-v",
             "quiet",
@@ -66,8 +71,14 @@ pub fn probe(config: &Config, input: &Path) -> Result<ProbeMeta> {
         .arg(input)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output()
+        .spawn()
         .context("ffprobe: failed to spawn")?;
+
+    let pcb_guard = os_rt.register_process(child.id(), "ffprobe", &input.display().to_string());
+    let output = child
+        .wait_with_output()
+        .context("ffprobe: failed to wait on child process")?;
+    pcb_guard.finish(output.status.code());
 
     if !output.status.success() {
         return Err(anyhow!(
@@ -122,7 +133,12 @@ pub fn transcode_to_mp4(config: &Config, input: &Path, out: &Path) -> Result<()>
     if let Some(parent) = out.parent() {
         std::fs::create_dir_all(parent).ok();
     }
-    let status = Command::new(&config.ffmpeg_bin)
+    let os_rt = crate::os_runtime::global();
+    let _subproc_permit = os_rt
+        .acquire_subprocess_permit_blocking()
+        .ok_or_else(|| anyhow!("ffmpeg transcode aborted: system shutting down"))?;
+
+    let child = Command::new(&config.ffmpeg_bin)
         .args([
             "-y",
             "-i",
@@ -142,11 +158,25 @@ pub fn transcode_to_mp4(config: &Config, input: &Path, out: &Path) -> Result<()>
         .arg(out)
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
-        .status()
+        .spawn()
         .context("ffmpeg: failed to spawn")?;
 
-    if !status.success() {
-        return Err(anyhow!("ffmpeg transcode failed (exit {:?})", status.code()));
+    let pcb_guard = os_rt.register_process(
+        child.id(),
+        "ffmpeg:transcode",
+        &input.display().to_string(),
+    );
+    let output = child
+        .wait_with_output()
+        .context("ffmpeg: failed to wait on transcode process")?;
+    pcb_guard.finish(output.status.code());
+
+    if !output.status.success() {
+        return Err(anyhow!(
+            "ffmpeg transcode failed (exit {:?}): {}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr)
+        ));
     }
     Ok(())
 }
@@ -160,20 +190,36 @@ pub fn extract_frames(config: &Config, input: &Path, out_dir: &Path) -> Result<V
     let fps = config.frame_fps.max(0.1);
     let vf = format!("fps={}", fps);
 
-    let status = Command::new(&config.ffmpeg_bin)
+    let os_rt = crate::os_runtime::global();
+    let _subproc_permit = os_rt
+        .acquire_subprocess_permit_blocking()
+        .ok_or_else(|| anyhow!("ffmpeg extract aborted: system shutting down"))?;
+
+    let child = Command::new(&config.ffmpeg_bin)
         .args(["-y", "-i"])
         .arg(input)
         .args(["-vf", vf.as_str(), "-q:v", "3"])
         .arg(out_dir.join("frame_%05d.jpg"))
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
-        .status()
+        .spawn()
         .context("ffmpeg: failed to spawn")?;
 
-    if !status.success() {
+    let pcb_guard = os_rt.register_process(
+        child.id(),
+        "ffmpeg:extract_frames",
+        &input.display().to_string(),
+    );
+    let output = child
+        .wait_with_output()
+        .context("ffmpeg: failed to wait on extract_frames process")?;
+    pcb_guard.finish(output.status.code());
+
+    if !output.status.success() {
         return Err(anyhow!(
-            "ffmpeg extract frames failed (exit {:?})",
-            status.code()
+            "ffmpeg extract frames failed (exit {:?}): {}",
+            output.status.code(),
+            String::from_utf8_lossy(&output.stderr)
         ));
     }
 

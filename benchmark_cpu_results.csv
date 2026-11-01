@@ -1,0 +1,121 @@
+﻿Timestamp,SampleIndex,PhaseStage,PhaseName,CpuWorkloadType,TotalSystemCpuPercent,BackendCpuPercent,MemoryMB,ThreadCount,ActiveChildCount,ActiveChildPids,ZombieCount
+07:56:36,1,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",44,0,20.97,17,0,"",0
+07:56:39,2,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",51,0,20.97,17,0,"",0
+07:56:41,3,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",56,0,20.97,17,0,"",0
+07:56:43,4,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",45,0,20.95,17,0,"",0
+07:56:45,5,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",74,0,20.95,17,0,"",0
+07:56:47,6,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",53,0,20.95,17,0,"",0
+07:56:49,7,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",40,0,20.95,17,0,"",0
+07:56:51,8,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",43,0,20.95,17,0,"",0
+07:56:53,9,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",51,0,20.95,17,0,"",0
+07:56:56,10,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",48,0,20.95,17,0,"",0
+07:56:58,11,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",77,0,20.95,17,0,"",0
+07:57:00,12,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",73,0,20.95,17,0,"",0
+07:57:02,13,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",57,0,20.95,17,0,"",0
+07:57:04,14,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",55,0,20.95,17,0,"",0
+07:57:06,15,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",80,0,20.95,17,0,"",0
+07:57:08,16,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",73,0,20.95,17,0,"",0
+07:57:10,17,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",66,0,20.95,17,0,"",0
+07:57:12,18,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",79,0,20.93,15,0,"",0
+07:57:15,19,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",87,0,20.93,15,0,"",0
+07:57:17,20,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",99,0,20.93,15,0,"",0
+07:57:19,21,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",63,0,20.93,15,0,"",0
+07:57:21,22,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",100,0,20.93,15,0,"",0
+07:57:23,23,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",100,0,20.93,15,0,"",0
+07:57:25,24,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",100,0,20.93,15,0,"",0
+07:57:28,25,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",100,0,20.85,15,0,"",0
+07:57:30,26,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",100,0,20.85,15,0,"",0
+07:57:32,27,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",94,0,20.85,15,0,"",0
+07:57:34,28,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",77,0,20.85,15,0,"",0
+07:57:36,29,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",73,0,20.85,15,0,"",0
+07:57:38,30,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",91,0,20.85,15,0,"",0
+07:57:40,31,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",91,0,20.85,15,0,"",0
+07:57:43,32,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",68,0,20.85,15,0,"",0
+07:57:45,33,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",79,0,20.85,15,0,"",0
+07:57:47,34,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",77,0,20.85,15,0,"",0
+07:57:49,35,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",91,0,20.85,15,0,"",0
+07:57:51,36,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",77,0,20.85,15,0,"",0
+07:57:53,37,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",61,0,20.85,15,0,"",0
+07:57:55,38,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",71,0,20.85,15,0,"",0
+07:57:57,39,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",83,0,20.85,15,0,"",0
+07:57:59,40,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",62,0,20.85,15,0,"",0
+07:58:02,41,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",85,0,20.85,15,0,"",0
+07:58:04,42,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",77,0,20.84,15,0,"",0
+07:58:06,43,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",71,0,20.84,15,0,"",0
+07:58:08,44,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",48,0,20.84,15,0,"",0
+07:58:10,45,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",48,0,20.84,15,0,"",0
+07:58:12,46,1,"Phase 1: Startup / Idle Baseline","Idle Baseline",34,1.78,21.6,15,0,"",0
+07:58:14,47,2,"Phase 2.4: AI Vision Analysis & Thread Coordination","Non-blocking I/O & Thread coordination",71,6.6,21.6,15,0,"",0
+07:58:16,48,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",45,2.73,21.61,15,0,"",0
+07:58:18,49,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",74,0,21.61,15,0,"",0
+07:58:21,50,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",23,0,21.61,15,0,"",0
+07:58:23,51,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",34,0,21.61,15,0,"",0
+07:58:25,52,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",23,0,21.61,15,0,"",0
+07:58:27,53,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",32,0,21.61,15,0,"",0
+07:58:29,54,2,"Phase 2.4: AI Vision Analysis & Thread Coordination","Non-blocking I/O & Thread coordination",25,5.13,21.82,15,0,"",0
+07:58:31,55,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",29,4.44,21.82,15,0,"",0
+07:58:33,56,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",72,2.86,22.15,15,0,"",0
+07:58:35,57,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",74,0.19,22.36,15,0,"",0
+07:58:37,58,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",46,0,22.36,15,0,"",0
+07:58:40,59,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",65,0,22.4,15,0,"",0
+07:58:42,60,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",58,0,22.45,15,0,"",0
+07:58:44,61,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",68,0,22.45,15,0,"",0
+07:58:46,62,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",74,0,22.56,15,0,"",0
+07:58:48,63,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",66,0.88,25.4,20,0,"",0
+07:58:50,64,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",57,0.19,25.23,20,0,"",0
+07:58:52,65,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",54,2.14,25.7,20,0,"",0
+07:58:54,66,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",69,0.19,25.77,20,0,"",0
+07:58:56,67,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",48,0,25.77,20,0,"",0
+07:58:58,68,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",68,0.12,25.79,22,0,"",0
+07:59:00,69,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",55,0,25.79,22,0,"",0
+07:59:03,70,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",77,1.92,26.03,22,0,"",0
+07:59:05,71,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",72,0.19,26.1,22,0,"",0
+07:59:07,72,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",69,2.24,26.01,22,0,"",0
+07:59:09,73,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",71,0,25.71,22,0,"",0
+07:59:11,74,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",58,2.37,26.15,22,0,"",0
+07:59:13,75,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",58,0.06,26.15,22,0,"",0
+07:59:15,76,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",71,1.38,28.91,23,0,"",0
+07:59:17,77,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",71,1.32,26.38,25,0,"",0
+07:59:19,78,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",59,0.19,25.78,25,0,"",0
+07:59:21,79,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",52,2.58,26.54,25,0,"",0
+07:59:23,80,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",52,0.13,26.51,26,0,"",0
+07:59:25,81,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",40,2.33,26.7,26,0,"",0
+07:59:28,82,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",43,1.2,29.49,26,0,"",0
+07:59:30,83,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",45,1.14,27,23,0,"",0
+07:59:32,84,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",39,0.06,26.74,23,0,"",0
+07:59:34,85,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",30,2.45,26.72,23,0,"",0
+07:59:36,86,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",50,0.06,26.81,23,0,"",0
+07:59:38,87,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",56,0.13,26.86,23,0,"",0
+07:59:40,88,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",59,0.13,26.98,23,0,"",0
+07:59:42,89,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",71,2.65,27.12,23,0,"",0
+07:59:44,90,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",56,0.06,26.86,23,0,"",0
+07:59:46,91,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",66,0,27.01,23,0,"",0
+07:59:48,92,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",68,0,27.16,23,0,"",0
+07:59:50,93,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",63,0,27.18,23,0,"",0
+07:59:52,94,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",66,0.06,27.15,22,0,"",0
+07:59:54,95,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",71,0,27.17,22,0,"",0
+07:59:56,96,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",54,2.08,31.91,24,0,"",0
+07:59:58,97,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",60,0.32,27.21,24,0,"",0
+08:00:01,98,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",68,2.16,27.46,24,0,"",0
+08:00:03,99,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",72,0,27.53,24,0,"",0
+08:00:05,100,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",63,2.72,27.41,24,0,"",0
+08:00:07,101,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",57,0.13,27.08,24,0,"",0
+08:00:09,102,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",57,0.19,27.52,24,0,"",0
+08:00:11,103,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",35,1.83,27.3,24,0,"",0
+08:00:13,104,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",59,2.08,30.88,24,0,"",0
+08:00:15,105,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",45,0.75,27.29,24,0,"",0
+08:00:17,106,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",71,0.19,27.41,24,0,"",0
+08:00:19,107,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",46,2.53,27.55,24,0,"",0
+08:00:21,108,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",55,0.19,27.76,24,0,"",0
+08:00:23,109,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",66,2.83,27.22,24,0,"",0
+08:00:25,110,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",11,0.19,27.4,24,0,"",0
+08:00:27,111,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",48,0.13,27.54,24,0,"",0
+08:00:29,112,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",28,2.52,27.3,24,0,"",0
+08:00:32,113,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",46,0.06,27.51,24,0,"",0
+08:00:34,114,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",66,0.06,27.22,23,0,"",0
+08:00:36,115,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",38,2.48,27.61,23,0,"",0
+08:00:38,116,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",29,2.4,31.94,23,0,"",0
+08:00:40,117,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",74,0.57,27.57,23,0,"",0
+08:00:42,118,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",73,1.83,31.43,23,0,"",0
+08:00:44,119,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",77,0.63,27.6,23,0,"",0
+08:00:46,120,3,"Phase 3: Post-processing Idle (Resources Reaped)","Idle Recovery (< 1%)",76,0.19,27.77,23,0,"",0

@@ -20,7 +20,7 @@ pub async fn overview(State(state): State<Arc<AppState>>, auth: AuthUser) -> App
             .fetch_one(&state.db)
             .await?;
     let dangerous_events: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM detected_events e JOIN videos v ON v.id = e.video_id WHERE v.owner_id = ? AND e.severity = 'dangerous'")
+        sqlx::query_scalar("SELECT COUNT(*) FROM detected_events e JOIN videos v ON v.id = e.video_id WHERE v.owner_id = ? AND e.severity = 'dangerous' AND lower(e.behavior_name) NOT IN ('walking', 'gesturing', 'gesture', 'pointing', 'thumbs_up', 'talking', 'standing', 'sitting', 'studying', 'phone_use', 'carrying_object', 'reading', 'eating', 'drinking', 'dancing', 'hugging', 'driving', 'working', 'exercising')")
             .bind(&auth.0.id)
             .fetch_one(&state.db)
             .await?;
@@ -41,7 +41,7 @@ pub async fn overview(State(state): State<Arc<AppState>>, auth: AuthUser) -> App
         sqlx::query_scalar(
             "SELECT COUNT(DISTINCT v.id) FROM videos v
              JOIN detected_events e ON e.video_id = v.id
-             WHERE v.owner_id = ? AND e.severity = 'dangerous'",
+             WHERE v.owner_id = ? AND e.severity = 'dangerous' AND lower(e.behavior_name) NOT IN ('walking', 'gesturing', 'gesture', 'pointing', 'thumbs_up', 'talking', 'standing', 'sitting', 'studying', 'phone_use', 'carrying_object', 'reading', 'eating', 'drinking', 'dancing', 'hugging', 'driving', 'working', 'exercising')",
         )
         .bind(&auth.0.id)
         .fetch_one(&state.db)
@@ -57,6 +57,7 @@ pub async fn overview(State(state): State<Arc<AppState>>, auth: AuthUser) -> App
         "SELECT e.behavior_name, COUNT(*) FROM detected_events e
          JOIN videos v ON v.id = e.video_id
          WHERE v.owner_id = ? AND e.severity = 'dangerous'
+           AND lower(e.behavior_name) NOT IN ('walking', 'gesturing', 'gesture', 'pointing', 'thumbs_up', 'talking', 'standing', 'sitting', 'studying', 'phone_use', 'carrying_object', 'reading', 'eating', 'drinking', 'dancing', 'hugging', 'driving', 'working', 'exercising')
          GROUP BY e.behavior_name
          ORDER BY COUNT(*) DESC",
     )
@@ -67,11 +68,11 @@ pub async fn overview(State(state): State<Arc<AppState>>, auth: AuthUser) -> App
     // All behaviors with dangerous count per behavior.
     let by_behavior: Vec<(String, i64, i64)> = sqlx::query_as(
         "SELECT e.behavior_name, COUNT(*),
-                SUM(CASE WHEN e.severity = 'dangerous' THEN 1 ELSE 0 END)
+                SUM(CASE WHEN e.severity = 'dangerous' AND lower(e.behavior_name) NOT IN ('walking', 'gesturing', 'gesture', 'pointing', 'thumbs_up', 'talking', 'standing', 'sitting', 'studying', 'phone_use', 'carrying_object', 'reading', 'eating', 'drinking', 'dancing', 'hugging', 'driving', 'working', 'exercising') THEN 1 ELSE 0 END)
          FROM detected_events e JOIN videos v ON v.id = e.video_id
          WHERE v.owner_id = ?
          GROUP BY e.behavior_name
-         ORDER BY SUM(CASE WHEN e.severity = 'dangerous' THEN 1 ELSE 0 END) DESC, COUNT(*) DESC",
+         ORDER BY SUM(CASE WHEN e.severity = 'dangerous' AND lower(e.behavior_name) NOT IN ('walking', 'gesturing', 'gesture', 'pointing', 'thumbs_up', 'talking', 'standing', 'sitting', 'studying', 'phone_use', 'carrying_object', 'reading', 'eating', 'drinking', 'dancing', 'hugging', 'driving', 'working', 'exercising') THEN 1 ELSE 0 END) DESC, COUNT(*) DESC",
     )
     .bind(&auth.0.id)
     .fetch_all(&state.db)
@@ -143,7 +144,7 @@ pub async fn video_stats(
         .fetch_one(&state.db)
         .await?;
     let dangerous: i64 =
-        sqlx::query_scalar("SELECT COUNT(*) FROM detected_events WHERE video_id = ? AND severity = 'dangerous'")
+        sqlx::query_scalar("SELECT COUNT(*) FROM detected_events WHERE video_id = ? AND severity = 'dangerous' AND lower(behavior_name) NOT IN ('walking', 'gesturing', 'gesture', 'pointing', 'thumbs_up', 'talking', 'standing', 'sitting', 'studying', 'phone_use', 'carrying_object', 'reading', 'eating', 'drinking', 'dancing', 'hugging', 'driving', 'working', 'exercising')")
             .bind(&id)
             .fetch_one(&state.db)
             .await?;

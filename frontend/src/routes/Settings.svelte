@@ -137,9 +137,9 @@
 </script>
 
 <div class="settings">
-  <h1>⚙️ Cài đặt AI</h1>
+  <h1>Cài đặt</h1>
   <p class="sub">
-    Chọn model cho từng tác vụ (Hỗ trợ Gemini, Qwen, DeepSeek & Ling giá rẻ, tốc độ cao). Thay đổi có hiệu lực ngay.
+    Chọn mô hình cho từng tác vụ (Hỗ trợ Gemini, Qwen, DeepSeek & Ling giá rẻ, tốc độ cao). Thay đổi có hiệu lực ngay.
   </p>
 
   {#if error}<div class="error">{error}</div>{/if}
@@ -149,13 +149,13 @@
     <div class="empty">Đang tải…</div>
   {:else}
     <div class="card group">
-      <h2>👁 Model phân tích hình ảnh (Vision)</h2>
+      <h2>Mô hình phân tích hình ảnh</h2>
       <p class="hint">
-        Nhận diện hành vi + đối tượng từ frame video.
-        <strong>Bắt buộc là model đa phương thức (nhận ảnh).</strong>
+        Nhận diện hành vi và đối tượng từ khung hình video.
+        <strong>Bắt buộc là mô hình đa phương thức (nhận ảnh).</strong>
       </p>
       <select bind:value={visionModel}>
-        <optgroup label="⭐ Đề xuất (Gemini, Qwen, DeepSeek)">
+        <optgroup label="Đề xuất (Gemini, Qwen, DeepSeek)">
           {#each visionOptions() as p (p.id)}
             <option value={p.id}>{p.label}</option>
           {/each}
@@ -168,9 +168,9 @@
           </optgroup>
         {/if}
         {#if liveFilteredVision.length > 0}
-          <optgroup label={`Model mở rộng khả dụng (${liveFilteredVision.length})`}>
+          <optgroup label={`Mô hình mở rộng khả dụng (${liveFilteredVision.length})`}>
             {#each liveFilteredVision as m (m)}
-              <option value={m}>{m} 👁</option>
+              <option value={m}>{m}</option>
             {/each}
           </optgroup>
         {/if}
@@ -178,10 +178,10 @@
     </div>
 
     <div class="card group">
-      <h2>💬 Model chatbot (Text)</h2>
-      <p class="hint">Xử lý tổng hợp văn bản và trả lời câu hỏi — ưu tiên model siêu rẻ, tốc độ cao.</p>
+      <h2>Mô hình trợ lý đối thoại</h2>
+      <p class="hint">Xử lý tổng hợp văn bản và trả lời câu hỏi — ưu tiên mô hình chi phí thấp, tốc độ cao.</p>
       <select bind:value={chatModel}>
-        <optgroup label="⭐ Đề xuất (Gemini, Qwen, DeepSeek, Ling)">
+        <optgroup label="Đề xuất (Gemini, Qwen, DeepSeek, Ling)">
           {#each chatOptions() as p (p.id)}
             <option value={p.id}>{p.label}</option>
           {/each}
@@ -194,7 +194,7 @@
           </optgroup>
         {/if}
         {#if liveFiltered.length > 0}
-          <optgroup label={`Model mở rộng khả dụng (${liveFiltered.length})`}>
+          <optgroup label={`Mô hình mở rộng khả dụng (${liveFiltered.length})`}>
             {#each liveFiltered as m (m)}
               <option value={m}>{m}</option>
             {/each}
@@ -205,10 +205,10 @@
 
     <div class="actions">
       <button class="primary" on:click={save} disabled={saving}>
-        {saving ? 'Đang lưu…' : '💾 Lưu cấu hình'}
+        {saving ? 'Đang lưu…' : 'Lưu cấu hình'}
       </button>
       <button on:click={discover} disabled={discovering}>
-        {discovering ? 'Đang dò…' : '🔄 Dò lại model khả dụng'}
+        {discovering ? 'Đang dò…' : 'Dò lại mô hình khả dụng'}
       </button>
     </div>
 

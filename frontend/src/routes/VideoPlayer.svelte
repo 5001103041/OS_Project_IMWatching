@@ -58,6 +58,25 @@
   let timelineEl: HTMLDivElement;
   let elementDuration = 0;
 
+  interface LiveHardwareTelemetry {
+    cpuPercent: number;
+    backendCpuPercent: number;
+    ramUsedGb: number;
+    ramTotalGb: number;
+    ramPercent: number;
+    diskPercent: number;
+    phaseName: string;
+    phaseDescription: string;
+    activeChildName: string | null;
+    activeChildPid: number | null;
+    zombieCount: number;
+    permitsAvailable: number;
+    permitsTotal: number;
+  }
+
+  let hwStats: LiveHardwareTelemetry | null = null;
+  let hwTimer: number | null = null;
+
   function updateElementDuration() {
     if (videoEl && videoEl.duration && isFinite(videoEl.duration) && videoEl.duration > 0) {
       elementDuration = videoEl.duration;
@@ -80,6 +99,9 @@
 
   onMount(async () => {
     await load();
+    fetchTelemetry();
+    hwTimer = window.setInterval(fetchTelemetry, 1500);
+
     pollTimer = window.setInterval(async () => {
       if (isProcessing) {
         await load();
@@ -91,7 +113,98 @@
 
   onDestroy(() => {
     if (pollTimer) clearInterval(pollTimer);
+    if (hwTimer) clearInterval(hwTimer);
   });
+
+  function formatPhaseName(name: string): string {
+    if (!name) return 'Giai đoạn 1: Khởi động hệ thống';
+    const n = name.toLowerCase();
+    if (n.includes('phase 3') || n.includes('post-processing') || n.includes('giai đoạn 3') || n.includes('hậu kỳ') || n.includes('nghỉ sau')) {
+      return 'Giai đoạn 3: Hoàn tất xử lý hậu kỳ';
+    }
+    if (n.includes('teardown') || n.includes('shutdown') || n.includes('tắt máy')) {
+      return 'Giai đoạn 3: Giải phóng tài nguyên';
+    }
+    if (n.includes('2.2') || n.includes('transcoding') || n.includes('chuyển mã')) {
+      return 'Giai đoạn 2.2: Chuyển mã video (FFmpeg)';
+    }
+    if (n.includes('2.3') || n.includes('extraction') || n.includes('trích xuất')) {
+      return 'Giai đoạn 2.3: Trích xuất khung hình (FFmpeg)';
+    }
+    if (n.includes('2.1') || n.includes('metadata') || n.includes('probing') || n.includes('đọc thông tin')) {
+      return 'Giai đoạn 2.1: Đọc thông tin video (FFmpeg)';
+    }
+    if (n.includes('2.4') || n.includes('vision') || n.includes('detection') || n.includes('phân tích')) {
+      return 'Giai đoạn 2.4: Phân tích hình ảnh AI';
+    }
+    if (n.includes('phase 2') || n.includes('giai đoạn 2')) {
+      return 'Giai đoạn 2: Xử lý video';
+    }
+    if (n.includes('phase 1') || n.includes('startup') || n.includes('idle') || n.includes('giai đoạn 1') || n.includes('khởi động')) {
+      return 'Giai đoạn 1: Khởi động hệ thống';
+    }
+    return name;
+  }
+
+  function formatPhaseDescription(desc: string): string {
+    if (!desc) return '';
+    const d = desc.toLowerCase();
+    if (d.includes('lắng nghe') || d.includes('cổng tcp') || d.includes('sẵn sàng tiếp nhận') || d.includes('tcp')) {
+      return '';
+    }
+    if (d.includes('vision') || d.includes('processing frames') || d.includes('giải mã khung hình') || d.includes('không đồng bộ') || d.includes('không nghẽn')) {
+      return 'Đang giải mã khung hình và gửi yêu cầu không đồng bộ đến Vision API.';
+    }
+    if (d.includes('ffprobe') || d.includes('probing') || d.includes('đọc thông tin')) {
+      return 'Thực thi tiến trình con ffprobe để đọc thông tin video.';
+    }
+    if (d.includes('transcode') || d.includes('chuyển mã')) {
+      return 'Thực thi tiến trình con FFmpeg để chuyển mã video.';
+    }
+    if (d.includes('extract') || d.includes('trích xuất')) {
+      return 'Thực thi tiến trình con FFmpeg để trích xuất khung hình.';
+    }
+    if (d.includes('reaped') || d.includes('thu hồi') || d.includes('hậu kỳ') || d.includes('nghỉ sau')) {
+      return 'Đã hoàn tất xử lý và thu hồi toàn bộ tiến trình con.';
+    }
+    return '';
+  }
+
+  async function fetchTelemetry() {
+    try {
+      const [hwRes, osRes] = await Promise.all([
+        api.get<any>('/system/hardware').catch((err) => {
+          console.warn('Lỗi đọc hardware:', err);
+          return null;
+        }),
+        api.get<any>('/os/metrics').catch((err) => {
+          console.warn('Lỗi đọc os/metrics:', err);
+          return null;
+        }),
+      ]);
+
+      if (hwRes || osRes) {
+        const activeChild = osRes?.process_table?.active_child_processes?.[0] || null;
+        hwStats = {
+          cpuPercent: Math.round(hwRes?.cpu?.global_usage_percent || 0),
+          backendCpuPercent: Number((hwRes?.cpu?.backend_process_usage_percent || 0).toFixed(1)),
+          ramUsedGb: Number((hwRes?.ram?.used_gb || 0).toFixed(1)),
+          ramTotalGb: Number((hwRes?.ram?.total_gb || 0).toFixed(1)),
+          ramPercent: Math.round(hwRes?.ram?.used_percent || 0),
+          diskPercent: Math.round(hwRes?.disks?.[0]?.used_percent || 0),
+          phaseName: formatPhaseName(osRes?.current_phase?.name || ''),
+          phaseDescription: formatPhaseDescription(osRes?.current_phase?.description || ''),
+          activeChildName: activeChild?.program || null,
+          activeChildPid: activeChild?.os_pid || null,
+          zombieCount: osRes?.process_table?.zombie_processes_count || 0,
+          permitsAvailable: osRes?.synchronization?.available_pipeline_permits ?? 2,
+          permitsTotal: osRes?.synchronization?.max_pipeline_permits ?? 2,
+        };
+      }
+    } catch (e) {
+      console.error('Lỗi đọc telemetry:', e);
+    }
+  }
 
   async function fetchProgress() {
     try {
@@ -177,9 +290,9 @@
   function statusLabel(s: string): string {
     const map: Record<string, string> = {
       uploaded: 'Đã tải lên',
-      transcoding: 'Đang chuyển đổi',
-      extracting: 'Đang cắt frame',
-      analyzing: 'Đang phân tích AI',
+      transcoding: 'Đang chuyển đổi video',
+      extracting: 'Đang trích xuất khung hình',
+      analyzing: 'Đang phân tích',
       completed: 'Hoàn tất',
       failed: 'Lỗi',
     };
@@ -246,16 +359,16 @@
 
 <div class="player-page">
   <div class="head">
-    <h1>▶ {video?.final_filename || video?.original_filename || 'Video'}</h1>
+    <h1>{video?.final_filename || video?.original_filename || 'Video'}</h1>
     {#if video}
       <span class="status-pill {video.status}">{statusLabel(video.status)}</span>
       {#if video.status === 'completed' && events.length > 0}
         {#if dangerousCount >= 2}
-          <span class="badge danger">⚠ Nguy hiểm</span>
+          <span class="badge danger">Nguy hiểm</span>
         {:else if dangerousCount === 1}
-          <span class="badge warning">⚠ Nguy cơ cao</span>
+          <span class="badge warning">Nguy cơ cao</span>
         {:else}
-          <span class="badge normal">✓ An toàn</span>
+          <span class="badge normal">An toàn</span>
         {/if}
       {/if}
     {/if}
@@ -270,7 +383,7 @@
     {#if isProcessing && progress}
       <div class="progress-section">
         <div class="progress-label">
-          <span>⏳ {statusLabel(video.status)}</span>
+          <span>{statusLabel(video.status)}</span>
           <span>{progress.progress_pct}%</span>
         </div>
         <div class="progress-track">
@@ -322,28 +435,101 @@
         {/if}
 
         <div class="video-meta">
-          {video.duration_secs ? `⏱ ${Math.round(video.duration_secs)}s` : ''}
+          {video.duration_secs ? `${Math.round(video.duration_secs)} giây` : ''}
           {video.width ? ` · ${video.width}×${video.height}` : ''}
-          {events.length > 0 ? ` · ${events.length} frames` : ''}
+          {events.length > 0 ? ` · ${events.length} khung hình` : ''}
         </div>
 
         <!-- Collapsible summary -->
         <div class="card summary-card">
           <div class="summary-head">
-            <h3>Tóm tắt thông tin</h3>
+            <h3>Tóm tắt kết quả</h3>
             <div class="summary-actions">
               {#if summary}
                 <button class="sm" on:click={() => summaryOpen = !summaryOpen}>
-                  {summaryOpen ? '▲ Thu gọn' : '▼ Mở rộng'}
+                  {summaryOpen ? 'Thu gọn' : 'Mở rộng'}
                 </button>
               {/if}
               <button class="sm primary" on:click={loadSummary} disabled={summaryLoading}>
-                {summaryLoading ? '⏳ Đang tạo…' : summary ? '🔄 Tạo lại' : '✨ Tạo tóm tắt'}
+                {summaryLoading ? 'Đang tạo…' : summary ? 'Tạo lại' : 'Tạo bản tóm tắt'}
               </button>
             </div>
           </div>
           {#if summary && summaryOpen}
             <div class="summary-text">{@html renderMarkdown(summary)}</div>
+          {/if}
+        </div>
+
+        <!-- Giám sát tài nguyên khi phân tích -->
+        <div class="card hardware-monitor-card">
+          <div class="hw-head">
+            <div class="hw-title-row">
+              <h3>Giám sát tài nguyên khi phân tích</h3>
+              {#if isProcessing}
+                <span class="live-pulse-badge">Đang phân tích</span>
+              {:else}
+                <span class="idle-pulse-badge">Trực tiếp</span>
+              {/if}
+            </div>
+            {#if hwStats}
+              <span class="phase-badge">{hwStats.phaseName}</span>
+            {/if}
+          </div>
+
+          {#if hwStats}
+            <div class="hw-grid">
+              <!-- Mức CPU -->
+              <div class="hw-item">
+                <div class="hw-item-label">
+                  <span>Mức CPU tổng / Máy chủ</span>
+                  <span class="hw-val">{hwStats.cpuPercent}% / {hwStats.backendCpuPercent}%</span>
+                </div>
+                <div class="meter-track">
+                  <div
+                    class="meter-fill"
+                    style="width: {hwStats.cpuPercent}%; background: {hwStats.cpuPercent > 80 ? '#ef4444' : hwStats.cpuPercent > 50 ? '#f59e0b' : '#10b981'};"
+                  ></div>
+                </div>
+              </div>
+
+              <!-- Bộ nhớ RAM -->
+              <div class="hw-item">
+                <div class="hw-item-label">
+                  <span>Bộ nhớ RAM</span>
+                  <span class="hw-val">{hwStats.ramUsedGb} GB / {hwStats.ramTotalGb} GB ({hwStats.ramPercent}%)</span>
+                </div>
+                <div class="meter-track">
+                  <div
+                    class="meter-fill"
+                    style="width: {hwStats.ramPercent}%; background: {hwStats.ramPercent > 85 ? '#ef4444' : '#3b82f6'};"
+                  ></div>
+                </div>
+              </div>
+
+              <!-- Tiến trình con HĐH -->
+              <div class="hw-item">
+                <div class="hw-item-label">
+                  <span>Tiến trình con</span>
+                  {#if hwStats.activeChildName}
+                    <span class="hw-val running-val">{hwStats.activeChildName} (PID {hwStats.activeChildPid})</span>
+                  {:else}
+                    <span class="hw-val reaped-val">0 (Đã thu hồi)</span>
+                  {/if}
+                </div>
+                <div class="hw-sub-row">
+                  <span>Tiến trình Zombie: <strong>{hwStats.zombieCount}</strong></span>
+                  <span>Semaphore: <strong>{hwStats.permitsAvailable}/{hwStats.permitsTotal}</strong></span>
+                </div>
+              </div>
+            </div>
+
+            {#if hwStats.phaseDescription}
+              <div class="hw-desc">
+                {hwStats.phaseDescription}
+              </div>
+            {/if}
+          {:else}
+            <div class="hw-loading">Đang kết nối dữ liệu phần cứng theo thời gian thực...</div>
           {/if}
         </div>
       </div>
@@ -354,14 +540,14 @@
             type="text"
             bind:value={search}
             on:input={applySearch}
-            placeholder='Tìm: "đánh nhau", "kính", "ba lô"…'
+            placeholder="Tìm kiếm theo từ khóa..."
           />
         </div>
 
         <div class="count">
-          {filtered.length} / {events.length} frames
+          Đã xử lý: {filtered.length} / {events.length} khung hình
           {#if events.filter(e => e.severity === 'dangerous').length > 0}
-            · <span class="danger-count">⚠ {events.filter(e => e.severity === 'dangerous').length} nguy hiểm</span>
+            · <span class="danger-count">{events.filter(e => e.severity === 'dangerous').length} nguy hiểm</span>
           {/if}
         </div>
 
@@ -369,8 +555,8 @@
           {#if filtered.length === 0}
             <div class="empty">
               {video.status === 'completed'
-                ? 'Không có frame khớp.'
-                : 'Đang phân tích… frames sẽ xuất hiện tại đây.'}
+                ? 'Không có khung hình khớp.'
+                : 'Đang phân tích… các khung hình sẽ xuất hiện tại đây.'}
             </div>
           {:else}
             {#each filtered as e (e.id)}
@@ -382,7 +568,7 @@
                 <img src={frameUrl(e)} alt={e.behavior_name} loading="lazy" />
                 <div class="info">
                   <div class="row">
-                    <span class="badge {e.severity}">{e.severity === 'dangerous' ? '⚠ Nguy hiểm' : '✓ Bình thường'}</span>
+                    <span class="badge {e.severity}">{e.severity === 'dangerous' ? 'Nguy hiểm' : 'Bình thường'}</span>
                     <span class="time">{rangeLabel(e)}</span>
                     {#if e.confidence}
                       <span class="conf">{Math.round(e.confidence * 100)}%</span>
@@ -742,5 +928,125 @@
     color: #63b3ed;
     border: 1px solid rgba(99, 179, 237, 0.25);
     white-space: nowrap;
+  }
+
+  /* Hardware Telemetry Card inside Player */
+  .hardware-monitor-card {
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 16px;
+  }
+  .hw-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #1f2937;
+  }
+  .hw-title-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .hw-title-row h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: #f3f4f6;
+  }
+  .live-pulse-badge {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .idle-pulse-badge {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .phase-badge {
+    background: #1f2937;
+    color: #38bdf8;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid #374151;
+  }
+  .hw-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .hw-item {
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .hw-item-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #94a3b8;
+    margin-bottom: 8px;
+  }
+  .hw-val {
+    font-weight: 700;
+    color: #f1f5f9;
+  }
+  .running-val {
+    color: #f59e0b;
+  }
+  .reaped-val {
+    color: #10b981;
+  }
+  .meter-track {
+    height: 6px;
+    background: #1e293b;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .meter-fill {
+    height: 100%;
+    transition: width 0.4s ease, background-color 0.4s ease;
+  }
+  .hw-sub-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 4px;
+  }
+  .hw-sub-row strong {
+    color: #cbd5e1;
+  }
+  .hw-desc {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px dashed #1e293b;
+    font-size: 12px;
+    color: #94a3b8;
+    line-height: 1.4;
+  }
+  .hw-loading {
+    padding: 18px;
+    text-align: center;
+    color: #94a3b8;
+    font-size: 13px;
+    font-style: italic;
   }
 </style>

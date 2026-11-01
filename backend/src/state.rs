@@ -135,6 +135,7 @@ pub struct AppState {
     pub config: Config,
     pub db: SqlitePool,
     pub http_client: reqwest::Client,
+    pub os: std::sync::Arc<crate::os_runtime::OsRuntime>,
 }
 
 impl AppState {
@@ -147,6 +148,7 @@ impl AppState {
             config,
             db,
             http_client,
+            os: crate::os_runtime::global(),
         }
     }
 }

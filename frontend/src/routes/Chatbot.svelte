@@ -46,7 +46,7 @@
 {#if open}
   <div class="chatbox card">
     <div class="head">
-      <span>💬 Trợ lý video</span>
+      <span>Trợ lý đối thoại video</span>
       <button class="close" on:click={() => (open = false)}>✕</button>
     </div>
     <div class="messages">
@@ -73,7 +73,7 @@
     </div>
   </div>
 {:else}
-  <button class="fab" on:click={() => (open = true)}>💬</button>
+  <button class="fab" on:click={() => (open = true)}>Hỏi đáp</button>
 {/if}
 
 <style>
@@ -167,14 +167,15 @@
     position: fixed;
     bottom: 20px;
     right: 20px;
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    font-size: 24px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 700;
     background: var(--primary);
     border-color: var(--primary);
     color: #1a1205;
     z-index: 100;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
   }
 </style>

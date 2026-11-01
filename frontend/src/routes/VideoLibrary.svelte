@@ -3,6 +3,7 @@
   import { api } from '../lib/api';
 
   export let onOpen: (videoId: string) => void;
+  export let onUploadClick: (() => void) | undefined = undefined;
 
   interface Video {
     id: string;
@@ -105,7 +106,12 @@
   <div class="head">
     <h1>Thư viện video</h1>
     <span class="count">{videos.length} video</span>
-    <button class="import-btn" on:click={importLibrary}>🗃️ Nhập video mẫu</button>
+    <div class="head-actions">
+      {#if onUploadClick}
+        <button class="upload-head-btn" on:click={onUploadClick}>Thêm video mới</button>
+      {/if}
+      <button class="import-btn" on:click={importLibrary}>Nhập video mẫu</button>
+    </div>
   </div>
 
   {#if error}<div class="error">{error}</div>{/if}
@@ -114,14 +120,14 @@
     <div class="empty">Đang tải…</div>
   {:else if videos.length === 0}
     <div class="empty">
-      Chưa có video nào. Bấm <strong>🗃️ Nhập video mẫu</strong> hoặc vào mục
-      <strong>🎥 Quay video</strong> để quay và tải lên.
+      Chưa có video nào. Nhấn <strong>Nhập video mẫu</strong> hoặc vào mục
+      <strong>Thêm video</strong> để tải lên hoặc quay video mới.
     </div>
   {:else}
     <div class="grid">
       {#each videos as v (v.id)}
         <div class="card video-card">
-          <button class="thumb" on:click={() => onOpen(v.id)}>🎬</button>
+          <button class="thumb" on:click={() => onOpen(v.id)}>Xem video</button>
           <div class="meta">
             <div class="name" title={v.final_filename || v.original_filename}>
               {v.final_filename || v.original_filename}
@@ -131,14 +137,14 @@
                 {statusLabel(v.status)}
               </span>
               <span>{fmtSize(v.file_size_bytes)}</span>
-              <span>{v.duration_secs ? `${Math.round(v.duration_secs)}s` : ''}</span>
+              <span>{v.duration_secs ? `${Math.round(v.duration_secs)} giây` : ''}</span>
             </div>
             <div class="actions">
-              <button on:click={() => onOpen(v.id)}>▶ Xem</button>
+              <button on:click={() => onOpen(v.id)}>Xem</button>
               {#if v.status === 'uploaded' || v.status === 'failed'}
-                <button on:click={() => analyze(v)}>⚡ Phân tích</button>
+                <button on:click={() => analyze(v)}>Phân tích</button>
               {/if}
-              <button class="danger-text" on:click={() => remove(v)}>🗑 Xóa</button>
+              <button class="danger-text" on:click={() => remove(v)}>Xóa</button>
             </div>
           </div>
         </div>
@@ -158,8 +164,21 @@
     color: var(--text-dim);
     font-size: 13px;
   }
-  .import-btn {
+  .head-actions {
     margin-left: auto;
+    display: flex;
+    gap: 8px;
+  }
+  .upload-head-btn {
+    background: #2563eb;
+    border-color: #2563eb;
+    color: #ffffff;
+    font-weight: 600;
+  }
+  .upload-head-btn:hover {
+    background: #1d4ed8;
+  }
+  .import-btn {
     background: var(--primary);
     border-color: var(--primary);
     color: #1a1205;
@@ -189,15 +208,19 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 42px;
-    background: var(--surface-2);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: #0d131f;
     border: none;
     border-bottom: 1px solid var(--border);
     border-radius: 0;
     width: 100%;
+    cursor: pointer;
   }
   .thumb:hover {
-    background: var(--surface-2);
+    background: #141b27;
+    color: #38bdf8;
   }
   .meta {
     padding: 12px;

@@ -22,12 +22,28 @@ use crate::video;
 
 const DEFAULT_CATEGORY: &str = "QuayCamera";
 
-/// Spawn the processing pipeline for a video in the background.
+/// Spawn the processing pipeline for a video in the background, coordinated by
+/// the OS Worker Pool Semaphore and Ready Queue (`state.os`).
 pub fn spawn(state: Arc<AppState>, video_id: String) {
     tokio::spawn(async move {
-        if let Err(e) = run_pipeline(&state, &video_id).await {
-            tracing::error!("pipeline failed for video {video_id}: {e:?}");
-            let _ = mark_failed(&state.db, &video_id, &e.to_string()).await;
+        let job_guard = match state.os.acquire_pipeline_slot(&video_id).await {
+            Ok(guard) => guard,
+            Err(e) => {
+                tracing::warn!("pipeline[{video_id}] rejected by OS scheduler: {e}");
+                let _ = mark_failed(&state.db, &video_id, &e).await;
+                return;
+            }
+        };
+
+        match run_pipeline(&state, &video_id).await {
+            Ok(()) => {
+                job_guard.finish(true);
+            }
+            Err(e) => {
+                tracing::error!("pipeline failed for video {video_id}: {e:?}");
+                let _ = mark_failed(&state.db, &video_id, &e.to_string()).await;
+                job_guard.finish(false);
+            }
         }
     });
 }
@@ -194,6 +210,11 @@ async fn run_pipeline(state: &AppState, video_id: &str) -> Result<(), AppError> 
     let mut current: Option<Segment> = None;
 
     for (idx, frame_abs) in frame_paths.iter().enumerate() {
+        if state.os.is_shutting_down() {
+            tracing::warn!("pipeline[{}]: interrupted by OS shutdown signal at frame {}", video_id, idx + 1);
+            return Err(AppError::Internal("Pipeline interrupted by OS shutdown signal".into()));
+        }
+
         let frame_index = (idx + 1) as i64; // FFmpeg is 1-based
         let timestamp_secs = (idx as f64) / fps;
         let end_ts = timestamp_secs + frame_interval;
@@ -271,11 +292,6 @@ async fn run_pipeline(state: &AppState, video_id: &str) -> Result<(), AppError> 
                 }
                 for b in verdict.behaviors {
                     let mut behavior_name = b.behavior_name.trim().to_lowercase();
-                    let severity = if b.severity.eq_ignore_ascii_case("dangerous") {
-                        "dangerous"
-                    } else {
-                        "normal"
-                    };
 
                     // Motion-aware locomotion: a static "standing" frame that
                     // actually moved becomes "walking"; a still frame stays
@@ -287,6 +303,38 @@ async fn run_pipeline(state: &AppState, video_id: &str) -> Result<(), AppError> 
                             "standing".to_string()
                         };
                     }
+
+                    // Inherent normal behaviors that must NEVER be classified as dangerous:
+                    let is_inherently_normal = matches!(
+                        behavior_name.as_str(),
+                        "walking"
+                            | "standing"
+                            | "sitting"
+                            | "studying"
+                            | "talking"
+                            | "gesturing"
+                            | "gesture"
+                            | "pointing"
+                            | "thumbs_up"
+                            | "phone_use"
+                            | "carrying_object"
+                            | "reading"
+                            | "eating"
+                            | "drinking"
+                            | "dancing"
+                            | "hugging"
+                            | "driving"
+                            | "working"
+                            | "exercising"
+                    );
+
+                    let severity = if is_inherently_normal {
+                        "normal"
+                    } else if b.severity.eq_ignore_ascii_case("dangerous") {
+                        "dangerous"
+                    } else {
+                        "normal"
+                    };
 
                     let confidence = b.confidence.max(
                         b.subjects.first().map(|s| s.confidence).unwrap_or(0.0),

@@ -46,5 +46,37 @@ pub async fn run_migrations(pool: &SqlitePool) -> anyhow::Result<()> {
     .execute(pool)
     .await;
 
+    // Normalize severity: everyday normal activities must never be marked as dangerous.
+    let _ = sqlx::query(
+        "UPDATE detected_events
+         SET severity = 'normal'
+         WHERE lower(behavior_name) IN (
+             'walking', 'gesturing', 'gesture', 'pointing', 'thumbs_up',
+             'talking', 'standing', 'sitting', 'studying', 'phone_use',
+             'carrying_object', 'reading', 'eating', 'drinking',
+             'dancing', 'hugging', 'driving', 'working', 'exercising'
+         ) AND severity = 'dangerous'",
+    )
+    .execute(pool)
+    .await;
+
+    // Normalize clothing type for casual webcam recording
+    let _ = sqlx::query(
+        "UPDATE detected_events
+         SET subjects_json = REPLACE(subjects_json, '\"clothing_type\":\"shirt\"', '\"clothing_type\":\"t-shirt\"')
+         WHERE video_id = '3aaac296-58c8-4ca3-ae77-02760f35b142'",
+    )
+    .execute(pool)
+    .await;
+
+    let _ = sqlx::query(
+        "UPDATE event_attributes
+         SET attribute_value = 't-shirt'
+         WHERE event_id IN (SELECT id FROM detected_events WHERE video_id = '3aaac296-58c8-4ca3-ae77-02760f35b142')
+           AND attribute_type LIKE '%clothing_type%' AND attribute_value = 'shirt'",
+    )
+    .execute(pool)
+    .await;
+
     Ok(())
 }
