@@ -1,0 +1,87 @@
+================================================================================
+     IMWATCHING - YÊU CẦU HỆ THỐNG VÀ HƯỚNG DẪN CÀI ĐẶT MÔI TRƯỜNG
+================================================================================
+
+Dự án IMWatching bao gồm các thành phần chính:
+- Backend:   Viết bằng ngôn ngữ Rust (Axum, Tokio, SQLite)
+- Frontend:  Viết bằng Node.js / TypeScript (Svelte 4, Vite)
+- Xử lý Video: Sử dụng công cụ hệ thống FFmpeg và ffprobe
+
+--------------------------------------------------------------------------------
+1. DANH SÁCH CÁC CÔNG CỤ CẦN CÀI ĐẶT (PREREQUISITES)
+--------------------------------------------------------------------------------
+
+[1] Rust & Cargo (Trình biên dịch và quản lý gói của Rust)
+    - Phiên bản khuyến nghị: Rust 1.80 trở lên (bản Stable)
+    - Tải và cài đặt tại:   https://rustup.rs
+    - Hoặc cài qua winget:  winget install Rustlang.Rustup
+    - Kiểm tra sau khi cài: cargo --version && rustc --version
+
+[2] Node.js & npm (Môi trường chạy và quản lý thư viện Frontend)
+    - Phiên bản khuyến nghị: Node.js 20.x hoặc 22.x LTS (kèm npm 10+)
+    - Tải và cài đặt tại:   https://nodejs.org
+    - Hoặc cài qua winget:  winget install OpenJS.NodeJS.LTS
+    - Kiểm tra sau khi cài: node --version && npm --version
+
+[3] FFmpeg & ffprobe (Công cụ trích xuất khung hình và chuyển mã video)
+    - Phiên bản khuyến nghị: FFmpeg 6.x hoặc 7.x
+    - Tải và cài đặt tại:   https://ffmpeg.org/download.html
+    - Hoặc cài qua winget:  winget install Gyan.FFmpeg
+      (Hoặc tải bản giải nén 'ffmpeg-release-essentials.zip' và thêm thư mục 'bin' vào PATH)
+    - Kiểm tra sau khi cài: ffmpeg -version && ffprobe -version
+
+--------------------------------------------------------------------------------
+2. CÁC LỆNH KIỂM TRA NHANH MÔI TRƯỜNG TRÊN MÁY
+--------------------------------------------------------------------------------
+Mở Command Prompt (cmd) hoặc PowerShell và gõ các lệnh sau để xác nhận:
+
+    cargo --version     -> Kết quả mẫu: cargo 1.8x.x (...)
+    node --version      -> Kết quả mẫu: v20.xx.x hoặc v22.xx.x
+    npm --version       -> Kết quả mẫu: 10.xx.x
+    ffmpeg -version     -> Kết quả mẫu: ffmpeg version ...
+
+--------------------------------------------------------------------------------
+3. HƯỚNG DẪN KHỞI CHẠY (QUICK START)
+--------------------------------------------------------------------------------
+
+>>> CÁCH 1: KHỞI ĐỘNG 1-CLICK BẰNG FILE .BAT (KHUYẾN NGHỊ CHO WINDOWS) <<<
+Chỉ cần nhấp đúp vào file:
+    START.bat  (hoặc KHOI_DONG.bat)
+
+Hệ thống sẽ tự động:
+1. Kiểm tra các công cụ môi trường (Rust, Node.js, FFmpeg).
+2. Tự động khởi tạo file cấu hình backend/.env nếu chưa có.
+3. Tự động chạy 'npm install' cho frontend nếu chưa có node_modules.
+4. Mở song song Backend Server (cổng 8080) và Frontend Web Server (cổng 5173).
+5. Tự động mở trình duyệt web tại địa chỉ: http://localhost:5173
+
+Để tắt hệ thống: Chỉ cần nhấp đúp vào file STOP.bat (hoặc DUNG_HE_THONG.bat).
+
+
+>>> CÁCH 2: CHẠY THỦ CÔNG BẰNG DÒNG LỆNH (TERMINAL) <<<
+
+Terminal 1 - Khởi động Backend:
+    cd backend
+    cargo run
+    -> API lắng nghe tại: http://localhost:8080
+
+Terminal 2 - Khởi động Frontend:
+    cd frontend
+    npm install         (chỉ cần chạy lần đầu tiên tải về)
+    npm run dev
+    -> Giao diện web tại: http://localhost:5173
+
+--------------------------------------------------------------------------------
+4. CẤU HÌNH API AI (PHÂN TÍCH THỊ GIÁC VÀ HÀNH VI)
+--------------------------------------------------------------------------------
+Hệ thống sử dụng mô hình Multimodal Vision API (hỗ trợ Google Gemini hoặc OpenAI-compatible).
+Cấu hình trong file 'backend/.env':
+
+    AI_ENABLED=true
+    AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+    AI_API_KEY=<khóa-api-gemini-của-bạn>
+    AI_MODEL=gemini-3.8-flash
+
+Lưu ý: Bạn cũng có thể thay đổi và chọn các model AI trực tiếp ngay trên giao diện
+web tại trang "Cài đặt" (Settings), hệ thống sẽ tự động lưu và áp dụng ngay lập tức.
+================================================================================

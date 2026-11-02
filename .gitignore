@@ -23,4 +23,8 @@ frontend/.npm-cache/
 Thumbs.db
 .vscode/
 .idea/
+*.zip
+*.zip/
+filemoitaive.zip/
+GiaoDien/
 
