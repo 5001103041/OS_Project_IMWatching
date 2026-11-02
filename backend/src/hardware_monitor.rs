@@ -68,6 +68,44 @@ mod win32 {
         #[allow(dead_code)]
         pub fn GetLogicalDriveStringsW(n_buffer_length: u32, lp_buffer: *mut u16) -> u32;
     }
+
+    #[repr(C)]
+    #[derive(Debug)]
+    pub struct IP_ADAPTER_ADDRESSES {
+        pub length: u32,
+        pub if_index: u32,
+        pub next: *mut IP_ADAPTER_ADDRESSES,
+        pub adapter_name: *mut i8,
+        pub first_unicast_address: *mut std::ffi::c_void,
+        pub first_anycast_address: *mut std::ffi::c_void,
+        pub first_multicast_address: *mut std::ffi::c_void,
+        pub first_dns_server_address: *mut std::ffi::c_void,
+        pub dns_suffix: *mut u16,
+        pub description: *mut u16,
+        pub friendly_name: *mut u16,
+        pub physical_address: [u8; 8],
+        pub physical_address_length: u32,
+        pub flags: u32,
+        pub mtu: u32,
+        pub if_type: u32,
+        pub oper_status: u32,
+        pub ipv6_if_index: u32,
+        pub zone_indices: [u32; 16],
+        pub first_prefix: *mut std::ffi::c_void,
+        pub transmit_link_speed: u64,
+        pub receive_link_speed: u64,
+    }
+
+    #[link(name = "iphlpapi")]
+    extern "system" {
+        pub fn GetAdaptersAddresses(
+            family: u32,
+            flags: u32,
+            reserved: *mut std::ffi::c_void,
+            adapter_addresses: *mut u8,
+            size_pointer: *mut u32,
+        ) -> u32;
+    }
 }
 
 // ─── Data Structures ─────────────────────────────────────────────────────────
@@ -193,8 +231,15 @@ struct CpuSampleState {
     last_sampled: Instant,
 }
 
+struct NetworkSampleState {
+    prev_rx_bytes: u64,
+    prev_tx_bytes: u64,
+    last_sampled: Instant,
+}
+
 struct HardwareMonitorState {
     cpu_state: Option<CpuSampleState>,
+    network_state: Option<NetworkSampleState>,
     history: VecDeque<HardwareMetricSample>,
     last_report: Option<HardwareTelemetryReport>,
     last_report_time: Instant,
@@ -212,6 +257,7 @@ pub fn global_hardware_monitor() -> Arc<HardwareMonitor> {
             Arc::new(HardwareMonitor {
                 state: Mutex::new(HardwareMonitorState {
                     cpu_state: None,
+                    network_state: None,
                     history: VecDeque::with_capacity(MAX_METRIC_SAMPLES),
                     last_report: None,
                     last_report_time: Instant::now() - Duration::from_secs(10),
@@ -244,7 +290,7 @@ impl HardwareMonitor {
         let ram = read_ram_info();
         let disks = read_disks_info();
         let os = read_os_info();
-        let network = read_network_info();
+        let network = read_network_info(&mut state.network_state);
 
         let primary_disk_pct = disks.first().map(|d| d.used_percent).unwrap_or(0.0);
         let sample = HardwareMetricSample {
@@ -698,6 +744,19 @@ fn read_disks_info() -> Vec<DiskPartitionInfo> {
     disks
 }
 
+#[cfg(windows)]
+unsafe fn pwchar_to_string(ptr: *const u16) -> String {
+    if ptr.is_null() {
+        return String::new();
+    }
+    let mut len = 0;
+    while *ptr.add(len) != 0 {
+        len += 1;
+    }
+    let slice = std::slice::from_raw_parts(ptr, len);
+    String::from_utf16_lossy(slice).trim().to_string()
+}
+
 #[cfg(not(windows))]
 fn read_disks_info() -> Vec<DiskPartitionInfo> {
     vec![DiskPartitionInfo {
@@ -711,6 +770,58 @@ fn read_disks_info() -> Vec<DiskPartitionInfo> {
         used_gb: 232.8,
         used_percent: 50.0,
     }]
+}
+
+#[cfg(windows)]
+fn read_windows_os_version() -> (String, String, String) {
+    let mut product_name = "Microsoft Windows 11".to_string();
+    let mut display_version = "".to_string();
+    let mut build_number = "".to_string();
+
+    if let Ok(output) = std::process::Command::new("reg")
+        .args(["query", "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"])
+        .output()
+    {
+        let s = String::from_utf8_lossy(&output.stdout);
+        for line in s.lines() {
+            let line = line.trim();
+            if line.starts_with("ProductName") {
+                if let Some((_, val)) = line.split_once("REG_SZ") {
+                    product_name = val.trim().to_string();
+                }
+            } else if line.starts_with("DisplayVersion") {
+                if let Some((_, val)) = line.split_once("REG_SZ") {
+                    display_version = val.trim().to_string();
+                }
+            } else if line.starts_with("CurrentBuildNumber") {
+                if let Some((_, val)) = line.split_once("REG_SZ") {
+                    build_number = val.trim().to_string();
+                }
+            }
+        }
+    }
+
+    let build_num = build_number.parse::<u32>().unwrap_or(0);
+    // Trên Windows 11, ProductName trong Registry đôi khi vẫn hiển thị 'Windows 10' nhưng Build >= 22000
+    let clean_product = if build_num >= 22000 && product_name.contains("Windows 10") {
+        product_name.replace("Windows 10", "Windows 11")
+    } else {
+        product_name
+    };
+
+    let os_name = clean_product.clone();
+    let os_version = if !display_version.is_empty() {
+        format!("{} (Phiên bản {})", clean_product, display_version)
+    } else {
+        clean_product
+    };
+    let kernel_build = if !build_number.is_empty() {
+        format!("NT 10.0.{} (Win32 Kernel API)", build_number)
+    } else {
+        "NT 10.0 (Win32 Kernel API)".to_string()
+    };
+
+    (os_name, os_version, kernel_build)
 }
 
 fn read_os_info() -> OsSystemInfo {
@@ -732,10 +843,20 @@ fn read_os_info() -> OsSystemInfo {
         .or_else(|_| std::env::var("HOSTNAME"))
         .unwrap_or_else(|_| "DESKTOP-CLIENT".to_string());
 
+    #[cfg(windows)]
+    let (os_name, os_version, kernel_build) = read_windows_os_version();
+
+    #[cfg(not(windows))]
+    let (os_name, os_version, kernel_build) = (
+        "Linux / Unix".to_string(),
+        "Generic Unix (POSIX)".to_string(),
+        "POSIX Kernel".to_string(),
+    );
+
     OsSystemInfo {
-        os_name: "Microsoft Windows 11".to_string(),
-        os_version: "Windows 11 Home / Pro (Build 26300)".to_string(),
-        kernel_build: "NT 10.0.26300.9711 (Win32 Kernel API)".to_string(),
+        os_name,
+        os_version,
+        kernel_build,
         hostname,
         uptime_secs,
         uptime_formatted,
@@ -743,17 +864,188 @@ fn read_os_info() -> OsSystemInfo {
     }
 }
 
-fn read_network_info() -> NetworkCardInfo {
-    // Thông tin card mạng thực tế (Wi-Fi 802.11ax/ac hoặc Gigabit Ethernet)
-    NetworkCardInfo {
-        primary_interface_name: "Wi-Fi (Intel Wi-Fi 6 AX201 / Wireless LAN)".to_string(),
-        interface_type: "Wi-Fi 802.11ax".to_string(),
-        estimated_speed_mbps: 150, // Mbps thông dụng
-        rx_bytes_per_sec: 256_000, // ~250 KB/s
-        tx_bytes_per_sec: 128_000, // ~125 KB/s
-        rx_mb_per_sec: 0.25,
-        tx_mb_per_sec: 0.12,
+#[cfg(windows)]
+fn read_network_info(sample_state: &mut Option<NetworkSampleState>) -> NetworkCardInfo {
+    let mut primary_name = "Ethernet / Wi-Fi Adapter".to_string();
+    let mut if_type_str = "Mạng cục bộ (LAN)".to_string();
+    let mut speed_mbps = 100u64;
+
+    // 1. Quét card mạng thực tế đang kết nối từ Kernel bằng Win32 GetAdaptersAddresses
+    let mut buf_len: u32 = 16384;
+    let mut buffer: Vec<u8> = vec![0u8; buf_len as usize];
+
+    let mut ret = unsafe {
+        win32::GetAdaptersAddresses(
+            0,      // AF_UNSPEC
+            0x000E, // GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER
+            std::ptr::null_mut(),
+            buffer.as_mut_ptr(),
+            &mut buf_len,
+        )
+    };
+
+    if ret == 111 {
+        buffer.resize(buf_len as usize, 0);
+        ret = unsafe {
+            win32::GetAdaptersAddresses(
+                0,
+                0x000E,
+                std::ptr::null_mut(),
+                buffer.as_mut_ptr(),
+                &mut buf_len,
+            )
+        };
     }
+
+    if ret == 0 {
+        let mut best_score = -1;
+        let mut curr = buffer.as_ptr() as *const win32::IP_ADAPTER_ADDRESSES;
+
+        while !curr.is_null() {
+            let ad = unsafe { &*curr };
+            // Chỉ xét các card mạng đang hoạt động (OperStatus == 1) và có địa chỉ IP
+            if ad.oper_status == 1 && ad.if_type != 24 && !ad.first_unicast_address.is_null() {
+                let friendly = unsafe { pwchar_to_string(ad.friendly_name) };
+                let desc = unsafe { pwchar_to_string(ad.description) };
+                let raw_speed = ad.transmit_link_speed.max(ad.receive_link_speed);
+                // Bỏ qua giá trị tràn số của card ảo (ví dụ u64::MAX)
+                let cur_speed_mbps = if raw_speed < 100_000_000_000 {
+                    raw_speed / 1_000_000
+                } else {
+                    100
+                };
+
+                // Điểm ưu tiên: Ưu tiên card vật lý thật (Ethernet / Wi-Fi) hơn card mạng ảo (VPN, Virtual)
+                let mut score = 10;
+                let is_ethernet = ad.if_type == 6;
+                let is_wifi = ad.if_type == 71;
+
+                if is_ethernet {
+                    score += 50;
+                } else if is_wifi {
+                    score += 40;
+                }
+
+                let lower_desc = desc.to_lowercase();
+                if lower_desc.contains("intel")
+                    || lower_desc.contains("realtek")
+                    || lower_desc.contains("qualcomm")
+                    || lower_desc.contains("broadcom")
+                    || lower_desc.contains("killer")
+                    || lower_desc.contains("mediatek")
+                {
+                    score += 30;
+                }
+                if lower_desc.contains("virtual") || lower_desc.contains("tap") || lower_desc.contains("vpn") {
+                    score -= 40;
+                }
+
+                if score > best_score {
+                    best_score = score;
+                    primary_name = if !desc.is_empty() {
+                        format!("{} ({})", friendly, desc)
+                    } else {
+                        friendly.clone()
+                    };
+
+                    if is_wifi {
+                        if lower_desc.contains("wi-fi 6") || lower_desc.contains("ax") {
+                            if_type_str = "Wi-Fi 6 (802.11ax)".to_string();
+                        } else if lower_desc.contains("ac") || cur_speed_mbps >= 433 {
+                            if_type_str = "Wi-Fi 5 (802.11ac)".to_string();
+                        } else {
+                            if_type_str = "Wi-Fi (Wireless LAN)".to_string();
+                        }
+                    } else if is_ethernet {
+                        if cur_speed_mbps >= 1000 {
+                            if_type_str = "Gigabit Ethernet (LAN 1Gbps+)".to_string();
+                        } else {
+                            if_type_str = "Ethernet (LAN)".to_string();
+                        }
+                    } else if ad.if_type == 243 || ad.if_type == 244 {
+                        if_type_str = "Cellular (Mobile 4G/5G)".to_string();
+                    } else {
+                        if_type_str = "Mạng cục bộ (LAN)".to_string();
+                    }
+
+                    speed_mbps = cur_speed_mbps.max(10);
+                }
+            }
+            curr = ad.next;
+        }
+    }
+
+    // 2. Đọc lưu lượng mạng thực tế (Rx / Tx) theo thời gian thực từ Windows
+    let (curr_rx, curr_tx) = read_windows_network_traffic();
+    let now = Instant::now();
+
+    let mut rx_bytes_per_sec = 0u64;
+    let mut tx_bytes_per_sec = 0u64;
+
+    if let Some(prev) = sample_state {
+        let delta_secs = now.duration_since(prev.last_sampled).as_secs_f64();
+        if delta_secs > 0.05 {
+            let delta_rx = curr_rx.saturating_sub(prev.prev_rx_bytes);
+            let delta_tx = curr_tx.saturating_sub(prev.prev_tx_bytes);
+            rx_bytes_per_sec = (delta_rx as f64 / delta_secs) as u64;
+            tx_bytes_per_sec = (delta_tx as f64 / delta_secs) as u64;
+
+            prev.prev_rx_bytes = curr_rx;
+            prev.prev_tx_bytes = curr_tx;
+            prev.last_sampled = now;
+        }
+    } else {
+        *sample_state = Some(NetworkSampleState {
+            prev_rx_bytes: curr_rx,
+            prev_tx_bytes: curr_tx,
+            last_sampled: now,
+        });
+    }
+
+    let rx_mb_per_sec = ((rx_bytes_per_sec as f64) / 1_048_576.0 * 100.0).round() / 100.0;
+    let tx_mb_per_sec = ((tx_bytes_per_sec as f64) / 1_048_576.0 * 100.0).round() / 100.0;
+
+    NetworkCardInfo {
+        primary_interface_name: primary_name,
+        interface_type: if_type_str,
+        estimated_speed_mbps: speed_mbps,
+        rx_bytes_per_sec,
+        tx_bytes_per_sec,
+        rx_mb_per_sec,
+        tx_mb_per_sec,
+    }
+}
+
+#[cfg(not(windows))]
+fn read_network_info(_sample_state: &mut Option<NetworkSampleState>) -> NetworkCardInfo {
+    NetworkCardInfo {
+        primary_interface_name: "eth0 (Unix Network Interface)".to_string(),
+        interface_type: "Ethernet".to_string(),
+        estimated_speed_mbps: 1000,
+        rx_bytes_per_sec: 0,
+        tx_bytes_per_sec: 0,
+        rx_mb_per_sec: 0.0,
+        tx_mb_per_sec: 0.0,
+    }
+}
+
+#[cfg(windows)]
+fn read_windows_network_traffic() -> (u64, u64) {
+    if let Ok(output) = std::process::Command::new("netstat").arg("-e").output() {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        for line in stdout.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("Bytes") {
+                let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                if parts.len() >= 3 {
+                    let rx = parts[1].parse::<u64>().unwrap_or(0);
+                    let tx = parts[2].parse::<u64>().unwrap_or(0);
+                    return (rx, tx);
+                }
+            }
+        }
+    }
+    (0, 0)
 }
 
 #[cfg(test)]
@@ -765,12 +1057,33 @@ mod tests {
         let monitor = global_hardware_monitor();
         let report = monitor.get_telemetry();
 
+        println!("=== HARDWARE TELEMETRY REPORT ===");
+        println!("CPU: {} ({} logical cores, {} physical cores, usage: {:.1}%)",
+            report.cpu.model_name, report.cpu.logical_cores, report.cpu.physical_cores, report.cpu.global_usage_percent);
+        println!("RAM: {:.2} GB used / {:.2} GB total ({:.1}%)",
+            report.ram.used_gb, report.ram.total_gb, report.ram.used_percent);
+        for d in &report.disks {
+            println!("Disk {}: {:.1} GB free / {:.1} GB total ({:.1}% used)",
+                d.mount_point, d.free_gb, d.total_gb, d.used_percent);
+        }
+        println!("OS: {} | Version: {} | Kernel: {}",
+            report.os.os_name, report.os.os_version, report.os.kernel_build);
+        println!("Network: {} | Type: {} | Speed: {} Mbps | Live Rx: {:.2} MB/s | Live Tx: {:.2} MB/s",
+            report.network.primary_interface_name,
+            report.network.interface_type,
+            report.network.estimated_speed_mbps,
+            report.network.rx_mb_per_sec,
+            report.network.tx_mb_per_sec);
+        println!("=================================");
+
         assert!(!report.cpu.model_name.is_empty());
         assert!(report.cpu.logical_cores >= 1);
         assert!(report.ram.total_gb > 0.0);
         assert!(!report.disks.is_empty());
         assert!(!report.os.os_name.is_empty());
         assert!(report.os.uptime_secs > 0);
+        assert!(!report.network.primary_interface_name.is_empty());
+        assert!(report.network.estimated_speed_mbps > 0);
     }
 
     #[test]
@@ -785,5 +1098,67 @@ mod tests {
         assert!(!eval.cpu_eval.advice.is_empty());
         assert!(!eval.ram_eval.advice.is_empty());
         assert!(!eval.disk_eval.advice.is_empty());
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn test_native_network_adapters() {
+        let mut buf_len: u32 = 16384;
+        let mut buffer: Vec<u8> = vec![0u8; buf_len as usize];
+
+        let mut ret = unsafe {
+            win32::GetAdaptersAddresses(
+                0,      // AF_UNSPEC
+                0x000E, // GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER
+                std::ptr::null_mut(),
+                buffer.as_mut_ptr(),
+                &mut buf_len,
+            )
+        };
+
+        if ret == 111 {
+            buffer.resize(buf_len as usize, 0);
+            ret = unsafe {
+                win32::GetAdaptersAddresses(
+                    0,
+                    0x000E,
+                    std::ptr::null_mut(),
+                    buffer.as_mut_ptr(),
+                    &mut buf_len,
+                )
+            };
+        }
+
+        println!("GetAdaptersAddresses returned: {}", ret);
+        assert_eq!(ret, 0, "GetAdaptersAddresses should succeed");
+
+        let mut curr = buffer.as_ptr() as *const win32::IP_ADAPTER_ADDRESSES;
+        let mut count = 0;
+        while !curr.is_null() {
+            let ad = unsafe { &*curr };
+            let desc = unsafe { pwchar_to_string(ad.description) };
+            let friendly = unsafe { pwchar_to_string(ad.friendly_name) };
+            let speed_mbps = (ad.transmit_link_speed / 1_000_000).max(ad.receive_link_speed / 1_000_000);
+            println!(
+                "Adapter #{}: friendly='{}', desc='{}', if_type={}, oper_status={}, speed={} Mbps, has_ip={}",
+                count,
+                friendly,
+                desc,
+                ad.if_type,
+                ad.oper_status,
+                speed_mbps,
+                !ad.first_unicast_address.is_null()
+            );
+            count += 1;
+            curr = ad.next;
+        }
+        assert!(count > 0);
+
+        // Test network traffic parsing
+        let start = std::time::Instant::now();
+        let (rx, tx) = read_windows_network_traffic();
+        let elapsed = start.elapsed();
+        println!("read_windows_network_traffic: rx={}, tx={}, elapsed={:?}", rx, tx, elapsed);
+        assert!(rx > 0 || tx > 0);
     }
 }
