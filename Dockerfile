@@ -12,7 +12,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # ─── Stage 2: Build Backend ──────────────────────────
-FROM rust:1.82-bookworm AS backend-builder
+FROM rust:bookworm AS backend-builder
 WORKDIR /app/backend
 
 # Pre-cache dependencies
@@ -23,6 +23,7 @@ RUN rm -rf src
 
 # Copy real source and build release
 COPY backend/ ./
+RUN rm -f target/release/deps/imwatching_backend* target/release/imwatching-backend*
 RUN cargo build --release
 
 # ─── Stage 3: Runtime ────────────────────────────────
@@ -48,6 +49,7 @@ ENV STATIC_DIR=/app/dist
 ENV PORT=8080
 ENV MEDIA_DIR=/app/media
 ENV DATABASE_URL=sqlite:///app/data/imwatching.db?mode=rwc
+ENV JWT_SECRET=imwatching_default_secret_key_minimum_32_characters_for_prod_and_dev
 
 # Create persistent storage directories
 RUN mkdir -p /app/data /app/media

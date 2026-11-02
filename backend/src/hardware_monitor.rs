@@ -224,6 +224,7 @@ pub struct UploadHardwareReadiness {
 
 // ─── Hardware Monitor Core ──────────────────────────────────────────────────
 
+#[allow(dead_code)]
 struct CpuSampleState {
     prev_idle: u64,
     prev_kernel: u64,
@@ -231,6 +232,7 @@ struct CpuSampleState {
     last_sampled: Instant,
 }
 
+#[allow(dead_code)]
 struct NetworkSampleState {
     prev_rx_bytes: u64,
     prev_tx_bytes: u64,
